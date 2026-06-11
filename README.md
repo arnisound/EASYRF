@@ -1,5 +1,13 @@
 # EASYRF — Coordinateur PMSE RF France
 
+### 👉 [OUVRIR L'APPLICATION](https://arnisound.github.io/EASYRF/)
+
+> ⚠️ L'application **n'est pas cette page**. Cette page (sur `github.com`) affiche
+> seulement le code. Pour lancer l'app, clique sur le lien ci-dessus — il ouvre
+> `arnisound.github.io/EASYRF/`, où se trouve le bouton « Analyser TNT ».
+
+---
+
 Application de planification fréquences pour microphones sans fil (PMSE), basée sur les données de couverture TNT de l'ANFR.
 
 ## Structure
