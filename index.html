@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EASYRF — Coordinateur PMSE RF France</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.4.0/dist/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --blue:#185FA5;--blue-d:#0C447C;--green:#3B6D11;--red:#A32D2D;--amber:#854F0B;--purple:#534AB7;
+  --bg:#fff;--bg2:#f7f7f5;--bg3:#f0efe9;
+  --text:#1a1a18;--text2:#666;--text3:#999;
+  --border:rgba(0,0,0,.12);--border2:rgba(0,0,0,.2);
+  --radius:8px;--radius-lg:12px;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1c1c1a;--bg2:#252523;--bg3:#2e2e2b;
+  --text:#e8e8e4;--text2:#aaa;--text3:#666;
+  --border:rgba(255,255,255,.1);--border2:rgba(255,255,255,.2);
+}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;color:var(--text);background:var(--bg3);min-height:100vh}
+
+/* HEADER */
+.header{background:var(--bg);border-bottom:0.5px solid var(--border);padding:12px 20px;display:flex;align-items:center;gap:12px}
+.logo{font-size:18px;font-weight:700;letter-spacing:-.5px;color:var(--blue)}
+.logo span{color:var(--text);font-weight:400}
+.header-sub{font-size:11px;color:var(--text2)}
+
+/* MAIN */
+.main{max-width:1280px;margin:0 auto;padding:16px}
+.app{border:0.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--bg)}
+
+/* TOOLBAR */
+.toolbar{background:var(--bg2);border-bottom:0.5px solid var(--border);padding:8px 14px;display:flex;flex-direction:column;gap:8px}
+.trow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lbl{font-size:11px;color:var(--text2);white-space:nowrap}
+input[type=number],input[type=text]{padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:12px;outline:none}
+input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(24,95,165,.15)}
+select{padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:12px;outline:none}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border:0.5px solid var(--border2);border-radius:var(--radius);background:transparent;color:var(--text);cursor:pointer;font-size:12px;white-space:nowrap;transition:background .12s}
+.btn:hover{background:var(--bg2)}
+.btn-blue{background:var(--blue);border-color:var(--blue);color:#fff}.btn-blue:hover{background:var(--blue-d)}
+.btn-green{background:var(--green);border-color:var(--green);color:#fff}.btn-green:hover{background:#27500A}
+.btn-purple{background:var(--purple);border-color:var(--purple);color:#fff}.btn-purple:hover{background:#3C3489}
+.btn-xs{padding:3px 7px;font-size:11px}
+.sep{width:0.5px;height:20px;background:var(--border)}
+label.chk{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer}
+.add-bar{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius);padding:7px 10px;gap:8px}
+
+/* TABS */
+.tabs{display:flex;background:var(--bg2);border-bottom:0.5px solid var(--border)}
+.tab{padding:8px 16px;font-size:12px;cursor:pointer;border-bottom:2px solid transparent;color:var(--text2);display:flex;align-items:center;gap:5px}
+.tab.on{color:var(--text);border-bottom-color:var(--blue);background:var(--bg)}
+.pane{display:none;min-height:300px}.pane.on{display:block}
+
+/* TABLE */
+.tbl-sc{overflow:auto;max-height:520px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{position:sticky;top:0;z-index:2;background:var(--bg2);padding:6px 10px;text-align:left;font-weight:500;border-bottom:0.5px solid var(--border2);white-space:nowrap}
+td{padding:5px 10px;border-bottom:0.5px solid var(--border);white-space:nowrap;vertical-align:middle}
+.r-tv-occ td{background:rgba(163,45,45,.04)}
+.r-mic td{background:rgba(24,95,165,.05)}
+.r-im3 td{background:rgba(133,79,11,.04)}
+.r-im5 td{background:rgba(133,79,11,.02)}
+tr:hover td{background:var(--bg2)}
+.badge{display:inline-flex;align-items:center;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:500;line-height:1.6}
+.bTV{background:#FCEBEB;color:var(--red)}.bFree{background:#EAF3DE;color:var(--green)}
+.bMic{background:#E6F1FB;color:var(--blue)}.bIM3{background:#FAEEDA;color:var(--amber)}
+.bIM5{background:#FFF3DC;color:var(--amber)}.bOK{background:#EAF3DE;color:var(--green)}
+.bWarn{background:#FAEEDA;color:var(--amber)}.bErr{background:#FCEBEB;color:var(--red)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;vertical-align:middle;margin-right:3px}
+
+/* SPECTRUM */
+.spec-pad{padding:16px}
+#cv{display:block;width:100%;border-radius:var(--radius);border:0.5px solid var(--border)}
+.leg{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--text2)}
+.leg-i{display:flex;align-items:center;gap:5px}
+.leg-b{width:12px;height:10px;border-radius:2px;flex-shrink:0}
+
+/* PLAN */
+.plan-pad{padding:16px}
+.plan-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:7px;margin-top:12px}
+.plan-slot{border:0.5px solid var(--border);border-radius:var(--radius);padding:8px 10px;background:var(--bg);font-size:11px}
+.plan-slot.taken{background:rgba(163,45,45,.04);border-color:rgba(163,45,45,.3)}
+.plan-slot.mic{background:rgba(24,95,165,.06);border-color:rgba(24,95,165,.3)}
+.plan-slot.im-dump{background:rgba(133,79,11,.05);border-color:rgba(133,79,11,.3)}
+
+/* STATUS */
+.bar{padding:6px 14px;font-size:11px;color:var(--text2);background:var(--bg2);border-top:0.5px solid var(--border);display:flex;gap:8px;align-items:center}
+
+/* EMPTY STATE */
+.empty{padding:40px;text-align:center;color:var(--text2)}
+.empty i{font-size:28px;display:block;margin-bottom:10px;color:var(--text3)}
+
+/* BACKEND STATUS */
+.backend-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:10px;font-size:10px;border:0.5px solid var(--border)}
+.backend-pill.ok{color:var(--green);border-color:rgba(59,109,17,.3);background:rgba(59,109,17,.08)}
+.backend-pill.off{color:var(--amber);border-color:rgba(133,79,11,.3);background:rgba(133,79,11,.06)}
+.pulse{width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">EASY<span>RF</span></div>
+  <div class="header-sub">Coordinateur PMSE · France · 470–694 MHz</div>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+    <div class="backend-pill off" id="backendPill">
+      <div class="pulse"></div><span id="backendTxt">Backend hors ligne</span>
+    </div>
+    <span style="font-size:10px;color:var(--text3)">v1.0</span>
+  </div>
+</div>
+
+<div class="main">
+<div class="app">
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <div class="trow">
+    <span class="lbl">Lat</span>
+    <input type="number" id="lat" value="43.9493" step="0.0001" style="width:84px">
+    <span class="lbl">Lon</span>
+    <input type="number" id="lon" value="4.8055"  step="0.0001" style="width:84px">
+    <button class="btn btn-xs" id="geoBtn" title="Géolocaliser"><i class="ti ti-current-location"></i></button>
+    <button class="btn btn-blue" id="scanBtn"><i class="ti ti-broadcast"></i> Analyser TNT</button>
+    <div class="sep"></div>
+    <button class="btn btn-purple" id="autoBtn"><i class="ti ti-wand"></i> Plan auto</button>
+    <button class="btn btn-xs" id="clearBtn" style="border-color:var(--red);color:var(--red)"><i class="ti ti-trash"></i> Tout effacer</button>
+    <div class="sep"></div>
+    <label class="chk"><input type="checkbox" id="ck3" checked> IM3</label>
+    <label class="chk"><input type="checkbox" id="ck5"> IM5</label>
+    <label class="chk"><input type="checkbox" id="ckB" checked> Bande seule</label>
+    <button class="btn btn-xs" id="csvBtn" style="margin-left:auto"><i class="ti ti-download"></i> CSV</button>
+  </div>
+
+  <div class="trow add-bar">
+    <span class="lbl" style="font-weight:600">+ Micro</span>
+    <select id="selMod" onchange="applyPreset()" style="max-width:220px">
+      <option value="">— Modèle —</option>
+      <optgroup label="Shure">
+        <option value="Shure QLXD G50|614|694|200">Shure QLXD (G50) 614–694</option>
+        <option value="Shure QLXD J50|572|636|200">Shure QLXD (J50) 572–636</option>
+        <option value="Shure QLXD H50|534|598|200">Shure QLXD (H50) 534–598</option>
+        <option value="Shure ULXD H50|534|598|200">Shure ULXD (H50) 534–598</option>
+        <option value="Shure ULXD J50|572|636|200">Shure ULXD (J50) 572–636</option>
+        <option value="Shure Axient J53|566|636|200">Shure Axient Digital (J53) 566–636</option>
+        <option value="Shure Axient G50|614|694|200">Shure Axient (G50) 614–694</option>
+        <option value="Shure SLX-D H50|534|598|200">Shure SLX-D (H50) 534–598</option>
+        <option value="Shure SLX-D J53|566|636|200">Shure SLX-D (J53) 566–636</option>
+        <option value="Shure BLX24 H9|512|542|200">Shure BLX24 (H9) 512–542</option>
+        <option value="Shure BLX24 J11|596|616|200">Shure BLX24 (J11) 596–616</option>
+        <option value="Shure Microflex MX8|566|636|200">Shure Microflex MX8 (J53)</option>
+      </optgroup>
+      <optgroup label="Sennheiser">
+        <option value="Sennheiser EW100 G4 AW+|470|558|200">Sennheiser EW100 G4 (AW+) 470–558</option>
+        <option value="Sennheiser EW300 G4 AW+|470|558|200">Sennheiser EW300 G4 (AW+) 470–558</option>
+        <option value="Sennheiser EW300 G4 GW|558|626|200">Sennheiser EW300 G4 (GW) 558–626</option>
+        <option value="Sennheiser EW500 G4 AW+|470|558|200">Sennheiser EW500 G4 (AW+) 470–558</option>
+        <option value="Sennheiser EW500 G4 GW|558|626|200">Sennheiser EW500 G4 (GW) 558–626</option>
+        <option value="Sennheiser EW-DX AW3|520|607|200">Sennheiser EW-DX (AW3) 520–607</option>
+        <option value="Sennheiser EW-DX R1-9|606|694|200">Sennheiser EW-DX (R1-9) 606–694</option>
+        <option value="Sennheiser 2000 AW|470|558|200">Sennheiser 2000 Series (AW) 470–558</option>
+        <option value="Sennheiser 2000 BW|626|698|200">Sennheiser 2000 Series (BW) 626–698</option>
+        <option value="Sennheiser SK6000 AW+|470|558|200">Sennheiser SK6000 (AW+) 470–558</option>
+        <option value="Sennheiser SK6000 GW|558|626|200">Sennheiser SK6000 (GW) 558–626</option>
+        <option value="Sennheiser Digital 6000 A|470|538|200">Sennheiser Digital 6000 (A) 470–538</option>
+      </optgroup>
+      <optgroup label="Sony">
+        <option value="Sony DWX Series|470|606|200">Sony DWX Series 470–606</option>
+        <option value="Sony URX-P03D|566|638|200">Sony URX-P03D 566–638</option>
+        <option value="Sony DWM-02N|558|638|200">Sony DWM-02N 558–638</option>
+        <option value="Sony UWP-D21|534|608|200">Sony UWP-D21 534–608</option>
+        <option value="Sony UWP-D26|534|608|200">Sony UWP-D26 534–608</option>
+      </optgroup>
+      <optgroup label="Audio-Technica">
+        <option value="AT 3000 DE2|470|530|200">AT 3000 Series (DE2) 470–530</option>
+        <option value="AT 3000 EG2|560|596|200">AT 3000 Series (EG2) 560–596</option>
+        <option value="AT 5000 EF|560|596|200">AT 5000 Series (EF) 560–596</option>
+        <option value="AT System10 Pro|2400|2483|1000">AT System10 Pro 2.4 GHz</option>
+      </optgroup>
+      <optgroup label="Wisycom">
+        <option value="Wisycom MTP40S|470|694|200">Wisycom MTP40S 470–694</option>
+        <option value="Wisycom MTP41S|470|694|200">Wisycom MTP41S 470–694</option>
+        <option value="Wisycom MCR42S|470|694|200">Wisycom MCR42S 470–694</option>
+        <option value="Wisycom MCR42|470|694|200">Wisycom MCR42 470–694</option>
+        <option value="Wisycom MPR30|470|694|200">Wisycom MPR30 470–694</option>
+      </optgroup>
+      <optgroup label="Lectrosonics">
+        <option value="Lectrosonics SMDa A1|470|614|200">Lectrosonics SMDa (A1) 470–614</option>
+        <option value="Lectrosonics SMDa B1|614|691|200">Lectrosonics SMDa (B1) 614–691</option>
+        <option value="Lectrosonics DCR822 A1|470|614|200">Lectrosonics DCR822 (A1)</option>
+        <option value="Lectrosonics M2T A1|470|614|200">Lectrosonics M2T (A1)</option>
+      </optgroup>
+      <optgroup label="Røde / DJI">
+        <option value="Røde Wireless Go II|2400|2483|1000">Røde Wireless Go II (2.4 GHz)</option>
+        <option value="Røde Wireless ME|2400|2483|1000">Røde Wireless ME (2.4 GHz)</option>
+        <option value="DJI Mic 2|2400|2483|2000">DJI Mic 2 (2.4 GHz)</option>
+      </optgroup>
+      <optgroup label="Retours IEM">
+        <option value="Shure PSM300 H20|518|578|200">Shure PSM300 (H20) IEM 518–578</option>
+        <option value="Shure PSM900 G7|470|530|200">Shure PSM900 (G7) IEM 470–530</option>
+        <option value="Sennheiser EW300 IEM AW|516|558|200">Sennheiser EW300 IEM (AW)</option>
+        <option value="Sennheiser EW300 IEM GW|626|668|200">Sennheiser EW300 IEM (GW)</option>
+        <option value="Lectrosonics R1a A1|470|614|200">Lectrosonics R1a IEM (A1)</option>
+      </optgroup>
+    </select>
+    <input type="text"   id="micName" placeholder="Nom / rôle" style="width:110px">
+    <input type="number" id="micFreq" placeholder="MHz (auto)" style="width:80px" step="0.025">
+    <span id="hint" style="font-size:11px;color:var(--text2)"></span>
+    <button class="btn btn-green" id="addBtn"><i class="ti ti-plus"></i> Ajouter</button>
+    <button class="btn btn-xs" id="addNBtn" title="Ajouter N exemplaires"><i class="ti ti-copy"></i> ×N</button>
+    <span id="addErr" style="font-size:11px;color:var(--red);display:none"></span>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab on" data-t="table"><i class="ti ti-table"></i> Tableau</div>
+  <div class="tab" data-t="spectrum"><i class="ti ti-wave-sine"></i> Spectre</div>
+  <div class="tab" data-t="plan"><i class="ti ti-wand"></i> Plan auto</div>
+</div>
+
+<!-- TABLE -->
+<div class="pane on" id="pane-table">
+  <div class="tbl-sc" id="tblWrap">
+    <div class="empty"><i class="ti ti-broadcast"></i>Entrez des coordonnées et cliquez "Analyser TNT", puis ajoutez vos micros.</div>
+  </div>
+</div>
+
+<!-- SPECTRUM -->
+<div class="pane" id="pane-spectrum">
+  <div class="spec-pad">
+    <canvas id="cv" height="180" aria-label="Spectre UHF 470–694 MHz"></canvas>
+    <div class="leg">
+      <div class="leg-i"><div class="leg-b" style="background:rgba(163,45,45,.2);border:1px solid #A32D2D"></div>Canal TNT occupé</div>
+      <div class="leg-i"><div class="leg-b" style="background:rgba(59,109,17,.15);border:1px solid #3B6D11"></div>Canal libre</div>
+      <div class="leg-i"><div class="leg-b" style="background:#185FA5"></div>Porteuse micro</div>
+      <div class="leg-i"><div class="leg-b" style="background:#185FA520"></div>BW micro</div>
+      <div class="leg-i" id="li3"><div class="leg-b" style="background:#854F0B99"></div>IM3</div>
+      <div class="leg-i" id="li5" style="display:none"><div class="leg-b" style="background:#BA751766"></div>IM5</div>
+    </div>
+  </div>
+</div>
+
+<!-- PLAN AUTO -->
+<div class="pane" id="pane-plan">
+  <div class="plan-pad">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <strong>Plan fréquences automatique</strong>
+      <span style="font-size:11px;color:var(--text2)">Les produits IM tombent dans les canaux TV occupés ("poubelle").</span>
+      <button class="btn btn-purple" id="genBtn"><i class="ti ti-wand"></i> Générer</button>
+      <button class="btn btn-xs btn-green" id="applyBtn" style="display:none"><i class="ti ti-check"></i> Appliquer aux micros</button>
+    </div>
+    <div id="planOut" style="color:var(--text2);font-size:12px">Analysez TNT + ajoutez vos modèles de micros, puis cliquez Générer.</div>
+  </div>
+</div>
+
+<div class="bar">
+  <i class="ti ti-info-circle"></i>
+  <span id="st">Prêt — backend: <code>npm install && node server.js</code> dans /backend</span>
+  <span style="margin-left:auto;font-size:11px;color:var(--text3)" id="sts"></span>
+</div>
+</div>
+</div>
+
+<script>
+const MC=['#185FA5','#993556','#3B6D11','#854F0B','#534AB7','#0F6E56','#D85A30','#0C447C'];
+const S={lat:43.9493,lon:4.8055,ch:[],mics:[],im:[],show3:true,show5:false,onlyB:true,_fmin:470,_fmax:694,_bw:200,planSlots:[]};
+const BACKEND='http://localhost:3001';
+
+// ── Backend health check ──────────────────────────────────────────────
+async function checkBackend(){
+  try{
+    const r=await fetch(BACKEND+'/api/health',{signal:AbortSignal.timeout(2000)});
+    if(r.ok){
+      const pill=document.getElementById('backendPill');
+      pill.className='backend-pill ok';
+      document.getElementById('backendTxt').textContent='Backend connecté';
+    }
+  }catch(_){}
+}
+checkBackend();
+setInterval(checkBackend,15000);
+
+// ── TABS ──────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.pane').forEach(x=>x.classList.remove('on'));
+  t.classList.add('on');
+  document.getElementById('pane-'+t.dataset.t).classList.add('on');
+  if(t.dataset.t==='spectrum') drawSpec();
+}));
+function showTab(id){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.pane').forEach(x=>x.classList.remove('on'));
+  document.querySelector(`[data-t="${id}"]`).classList.add('on');
+  document.getElementById('pane-'+id).classList.add('on');
+}
+
+// ── GEO ──────────────────────────────────────────────────────────────
+document.getElementById('geoBtn').onclick=()=>{
+  if(!navigator.geolocation){setSt('GPS non supporté');return;}
+  navigator.geolocation.getCurrentPosition(p=>{
+    document.getElementById('lat').value=p.coords.latitude.toFixed(5);
+    document.getElementById('lon').value=p.coords.longitude.toFixed(5);
+    S.lat=p.coords.latitude; S.lon=p.coords.longitude;
+    setSt('✓ Position GPS obtenue');
+  },e=>setSt('Erreur GPS: '+e.message));
+};
+
+// ── SCAN ─────────────────────────────────────────────────────────────
+document.getElementById('scanBtn').onclick=async()=>{
+  S.lat=parseFloat(document.getElementById('lat').value)||43.9493;
+  S.lon=parseFloat(document.getElementById('lon').value)||4.8055;
+  setSt('Analyse TNT en cours...');
+  document.getElementById('scanBtn').disabled=true;
+  try {
+    let data=null;
+    // Essai 1 : backend local
+    try{
+      const r=await fetch(`${BACKEND}/api/tnt?lat=${S.lat}&lon=${S.lon}`,{signal:AbortSignal.timeout(4000)});
+      if(r.ok) data=await r.json();
+    }catch(_){}
+    // Essai 2 : agent IA Claude
+    if(!data||!data.channels){
+      data=await agentIA(S.lat,S.lon);
+    }
+    S.ch=data.channels||[];
+    const occ=S.ch.filter(c=>c.occupied).length;
+    setSt(`✓ ${data.source_label||data.source||'Données chargées'} — ${occ} canaux occupés, ${S.ch.length-occ} libres`);
+    computeIM(); renderAll();
+  }catch(e){setSt('Erreur: '+e.message);}
+  finally{document.getElementById('scanBtn').disabled=false;}
+};
+
+async function agentIA(lat,lon){
+  setSt('Agent IA — récupération données TNT...');
+  const prompt=`Expert RF PMSE France. Pour GPS lat=${lat} lon=${lon}, donne canaux TNT UHF C21–C48 (470–694MHz). freq_start=306+ch*8. JSON UNIQUEMENT sans texte ni backticks:
+{"location":"zone","emetteur":"émetteur","channels":[{"ch":21,"freq_start":474,"freq_end":482,"occupied":true,"mux":"R1","level_dbm":-52},...]}
+Mux: R1(TF1,F2,M6,Arte,F5) R2(France3) R3(TMC,TFX,LCI) R4(C8,CNews,CStar,Gulli) R5(F4,BFM,RMC) R6(W9,6ter,Teva) R7/R8(locaux). Plan réaliste pour cette zone France.`;
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
+  const d=await r.json();
+  const txt=d.content?.filter(b=>b.type==='text').map(b=>b.text).join('')||'';
+  let clean=txt.replace(/```json|```/g,'').trim();
+  const fi=clean.indexOf('{'),li=clean.lastIndexOf('}');
+  if(fi>=0&&li>=0) clean=clean.slice(fi,li+1);
+  const j=JSON.parse(clean);
+  return {source:'agent_ia',source_label:'Agent IA (Claude)',channels:j.channels||[]};
+}
+
+// ── PRESET ───────────────────────────────────────────────────────────
+function applyPreset(){
+  const v=document.getElementById('selMod').value;
+  if(!v){S._fmin=470;S._fmax=694;S._bw=200;document.getElementById('hint').textContent='';return;}
+  const p=v.split('|');
+  S._fmin=parseFloat(p[1]); S._fmax=parseFloat(p[2]); S._bw=parseFloat(p[3])||200;
+  document.getElementById('hint').textContent=`${p[1]}–${p[2]} MHz`;
+  document.getElementById('micName').value=p[0];
+  document.getElementById('micFreq').value='';
+}
+
+// ── ADD MIC ───────────────────────────────────────────────────────────
+document.getElementById('addBtn').onclick=()=>addMic(1);
+document.getElementById('addNBtn').onclick=()=>{
+  const n=parseInt(prompt('Combien de micros de ce modèle ?','4'));
+  if(n>0&&n<=32) addMic(n);
+};
+
+function addMic(count){
+  const name=document.getElementById('micName').value.trim()||('Micro '+(S.mics.length+1));
+  const fmin=S._fmin||470, fmax=S._fmax||694, bw=S._bw||200;
+  const err=document.getElementById('addErr');
+  err.style.display='none';
+  for(let i=0;i<count;i++){
+    let freq=i===0&&count===1?parseFloat(document.getElementById('micFreq').value):NaN;
+    if(!freq||isNaN(freq)){
+      freq=autoAssign(fmin,fmax);
+      if(!freq){err.textContent='Aucune fréquence libre dans cette plage';err.style.display='inline';return;}
+    }
+    if(freq<fmin||freq>fmax){err.textContent='Fréquence hors plage modèle';err.style.display='inline';return;}
+    const tntC=S.ch.find(c=>c.occupied&&freq>=c.freq_start&&freq<c.freq_end);
+    S.mics.push({id:Date.now()+i,name:count>1?name+' '+(i+1):name,freq,fmin,fmax,bw,tntConflict:!!tntC,color:MC[S.mics.length%MC.length],imHits:[]});
+    computeIM();
+  }
+  document.getElementById('micName').value='';
+  document.getElementById('micFreq').value='';
+  document.getElementById('selMod').value='';
+  document.getElementById('hint').textContent='';
+  renderAll();
+}
+
+function autoAssign(fmin,fmax){
+  const occ=S.ch.filter(c=>c.occupied).map(c=>({s:c.freq_start,e:c.freq_end}));
+  const used=S.mics.map(m=>m.freq);
+  for(let f=fmin+0.3;f<=fmax-0.3;f+=0.025){
+    f=parseFloat(f.toFixed(3));
+    if(occ.some(c=>f>=c.s&&f<c.e)) continue;
+    if(used.some(u=>Math.abs(f-u)<0.35)) continue;
+    if(S.im.some(im=>Math.abs(f-im.freq)<0.15)) continue;
+    return f;
+  }
+  return null;
+}
+
+// ── CLEAR ─────────────────────────────────────────────────────────────
+document.getElementById('clearBtn').onclick=()=>{S.mics=[];S.im=[];S.planSlots=[];renderAll();setSt('Micros effacés');};
+
+// ── IM ────────────────────────────────────────────────────────────────
+function computeIM(){
+  S.im=[];
+  const F=S.mics.map(m=>m.freq);
+  function push(ord,type,f1,f2,freq,f3){
+    const f=parseFloat(freq.toFixed(3));
+    if(f>200) S.im.push({ord,type,f1,f2,f3,freq:f});
+  }
+  for(let i=0;i<F.length;i++){
+    for(let j=i+1;j<F.length;j++){
+      const a=F[i],b=F[j];
+      push(3,`2f${L(i)}-f${L(j)}`,a,b,2*a-b);
+      push(3,`2f${L(j)}-f${L(i)}`,a,b,2*b-a);
+      push(5,`3f${L(i)}-2f${L(j)}`,a,b,3*a-2*b);
+      push(5,`3f${L(j)}-2f${L(i)}`,a,b,3*b-2*a);
+      for(let k=j+1;k<F.length;k++){
+        const c=F[k];
+        push(3,`f${L(i)}+f${L(j)}-f${L(k)}`,a,b,a+b-c,c);
+        push(3,`f${L(i)}+f${L(k)}-f${L(j)}`,a,b,a+c-b,c);
+        push(3,`f${L(j)}+f${L(k)}-f${L(i)}`,a,b,b+c-a,c);
+      }
+    }
+  }
+  S.mics.forEach(m=>{m.imHits=S.im.filter(im=>Math.abs(im.freq-m.freq)<0.15);});
+}
+function L(i){return String.fromCharCode(65+i);}
+
+// ── PLAN AUTO ─────────────────────────────────────────────────────────
+document.getElementById('genBtn').onclick=generatePlan;
+document.getElementById('applyBtn').onclick=applyPlan;
+document.getElementById('autoBtn').onclick=()=>{showTab('plan');generatePlan();};
+
+function generatePlan(){
+  const pr=document.getElementById('planOut');
+  if(!S.ch.length){pr.innerHTML='<span style="color:var(--red)">Lancez d\'abord l\'analyse TNT.</span>';return;}
+  const N=Math.max(S.mics.length,1);
+  const freeZones=S.ch.filter(c=>!c.occupied).map(c=>({s:c.freq_start,e:c.freq_end,ch:c.ch}));
+  const occZones=S.ch.filter(c=>c.occupied).map(c=>({s:c.freq_start,e:c.freq_end,ch:c.ch}));
+  function inOcc(f){return occZones.some(z=>f>=z.s&&f<z.e);}
+  function inFree(f){return freeZones.some(z=>f>=z.s&&f<z.e);}
+
+  const cands=[];
+  freeZones.forEach(z=>{for(let f=z.s+1;f<z.e-1;f+=0.025) cands.push(parseFloat(f.toFixed(3)));});
+
+  const chosen=[];
+  for(let n=0;n<N;n++){
+    let best=null,bestScore=-Infinity;
+    for(const f of cands){
+      if(!inFree(f)) continue;
+      if(chosen.some(u=>Math.abs(f-u)<0.35)) continue;
+      const temp=[...chosen,f];
+      let score=0,valid=true;
+      const tempIM=[];
+      for(let i=0;i<temp.length;i++) for(let j=i+1;j<temp.length;j++){
+        const a=temp[i],b=temp[j];
+        [2*a-b,2*b-a,3*a-2*b,3*b-2*a].forEach(im=>{if(im>470&&im<694) tempIM.push(parseFloat(im.toFixed(3)));});
+      }
+      for(const im of tempIM){
+        if(inOcc(im)) score+=3;
+        else if(!inFree(im)) score+=1;
+        else{ if(temp.some(fr=>Math.abs(fr-im)<0.15)){valid=false;break;} score-=2; }
+      }
+      const minD=chosen.length?Math.min(...chosen.map(u=>Math.abs(f-u))):999;
+      const total=score+(valid?10:0)+Math.min(minD,2);
+      if(valid&&total>bestScore){bestScore=total;best=f;}
+    }
+    if(best){chosen.push(best);}
+  }
+  S.planSlots=chosen.map((f,i)=>({freq:f,name:S.mics[i]?S.mics[i].name:'Micro '+(i+1)}));
+
+  const planIM=[];
+  for(let i=0;i<chosen.length;i++) for(let j=i+1;j<chosen.length;j++){
+    const a=chosen[i],b=chosen[j];
+    [2*a-b,2*b-a,3*a-2*b,3*b-2*a].forEach(im=>{
+      if(im>470&&im<694) planIM.push({freq:parseFloat(im.toFixed(3)),inOcc:inOcc(im)});
+    });
+  }
+  const imPoubelle=planIM.filter(im=>im.inOcc).length;
+  const imFree=planIM.filter(im=>!im.inOcc).length;
+
+  let h=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+    <span class="badge bOK">${chosen.length}/${N} fréquences placées</span>
+    <span class="badge bTV">${imPoubelle} IM → poubelle TV</span>
+    ${imFree>0?`<span class="badge bErr">${imFree} IM en zone libre</span>`:'<span class="badge bOK">0 IM en zone libre ✓</span>'}
+  </div><div class="plan-grid">`;
+
+  S.ch.forEach(ch=>{
+    const micsInCh=chosen.filter(f=>f>=ch.freq_start&&f<ch.freq_end);
+    const imInCh=planIM.filter(im=>im.freq>=ch.freq_start&&im.freq<ch.freq_end);
+    let cls='plan-slot';
+    if(ch.occupied) cls+=' taken';
+    if(micsInCh.length) cls+=' mic';
+    if(imInCh.length&&!micsInCh.length) cls+=' im-dump';
+    h+=`<div class="${cls}">
+      <div style="color:var(--text2);font-size:10px">C${ch.ch} · ${ch.freq_start}–${ch.freq_end}</div>
+      <div style="margin-top:3px">
+        ${ch.occupied?`<span class="badge bTV" style="font-size:9px">${ch.mux||'TNT'}</span>`:'<span class="badge bFree" style="font-size:9px">Libre</span>'}
+        ${micsInCh.map(f=>`<span class="badge bMic" style="font-size:9px">${f.toFixed(3)}</span>`).join('')}
+        ${imInCh.length&&!micsInCh.length?`<span class="badge bIM3" style="font-size:9px">IM×${imInCh.length}</span>`:''}
+      </div>
+    </div>`;
+  });
+  h+='</div>';
+  pr.innerHTML=h;
+  document.getElementById('applyBtn').style.display='inline-flex';
+}
+
+function applyPlan(){
+  S.planSlots.forEach((sl,i)=>{if(S.mics[i]) S.mics[i].freq=sl.freq;});
+  computeIM(); renderAll(); setSt('Plan appliqué');
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────
+function renderAll(){
+  renderTable(); drawSpec();
+  const occ=S.ch.filter(c=>c.occupied).length;
+  document.getElementById('sts').textContent=S.ch.length?`${occ} occ · ${S.ch.length-occ} libres · ${S.mics.length} micros · ${S.mics.filter(m=>m.imHits&&m.imHits.length).length} conflits IM`:'';
+  document.getElementById('li3').style.display=S.show3?'flex':'none';
+  document.getElementById('li5').style.display=S.show5?'flex':'none';
+}
+
+function renderTable(){
+  const w=document.getElementById('tblWrap');
+  if(!S.ch.length&&!S.mics.length){
+    w.innerHTML='<div class="empty"><i class="ti ti-broadcast"></i>Lancez l\'analyse TNT pour charger les canaux.</div>';return;
+  }
+  const FMIN=470,FMAX=698;
+  const items=[];
+  S.ch.forEach(c=>{if(c.freq_end<=FMAX) items.push({f:c.freq_start,t:'tv',d:c});});
+  S.mics.forEach((m,i)=>items.push({f:m.freq,t:'mic',d:m,i}));
+  const imShow=S.im.filter(im=>{
+    if(!S.show3&&im.ord===3) return false;
+    if(!S.show5&&im.ord===5) return false;
+    if(S.onlyB&&(im.freq<470||im.freq>694)) return false;
+    return true;
+  });
+  imShow.forEach(im=>items.push({f:im.freq,t:'im',d:im}));
+  items.sort((a,b)=>a.f-b.f);
+
+  let h=`<table><thead><tr>
+    <th>Type</th><th>Canal / ID</th><th>Fréq. début</th><th>Porteuse / Fréq. fin</th>
+    <th>Multiplex / Modèle</th><th>Niveau</th><th>Statut</th><th style="width:28px"></th>
+  </tr></thead><tbody>`;
+
+  items.forEach(it=>{
+    if(it.t==='tv'){
+      const c=it.d;
+      h+=`<tr class="${c.occupied?'r-tv-occ':''}">
+        <td><span class="badge ${c.occupied?'bTV':'bFree'}">C${c.ch}</span></td>
+        <td style="color:var(--text2)">Canal ${c.ch}</td>
+        <td style="font-family:monospace">${c.freq_start} MHz</td>
+        <td style="font-family:monospace">${c.freq_end} MHz</td>
+        <td>${c.mux||'—'}${c.mux_content?` <span style="font-size:10px;color:var(--text2)">${c.mux_content}</span>`:''}</td>
+        <td style="font-family:monospace;font-size:11px;color:var(--text2)">${c.level_dbm!=null?c.level_dbm+' dBm':'—'}</td>
+        <td><span class="badge ${c.occupied?'bTV':'bFree'}">${c.occupied?'Occupé':'Libre'}</span></td>
+        <td></td></tr>`;
+    } else if(it.t==='mic'){
+      const m=it.d;
+      const imH=m.imHits&&m.imHits.length?m.imHits.length:0;
+      const sb=m.tntConflict?'<span class="badge bErr">⚠ TNT</span>':(imH?`<span class="badge bWarn">IM×${imH}</span>`:'<span class="badge bOK">OK</span>');
+      h+=`<tr class="r-mic">
+        <td><span class="dot" style="background:${m.color}"></span><span class="badge bMic">Micro</span></td>
+        <td style="font-weight:600">${m.name}</td>
+        <td style="font-family:monospace;color:var(--text2)">${m.fmin} MHz</td>
+        <td style="font-family:monospace;font-weight:600;color:${m.color}">${m.freq} MHz</td>
+        <td style="color:var(--text2);font-size:11px">${m.fmin}–${m.fmax} · BW ${m.bw} kHz</td>
+        <td style="font-size:11px;color:var(--text2)">±${(m.bw/2).toFixed(0)} kHz</td>
+        <td>${sb}</td>
+        <td><button class="btn btn-xs" style="border-color:var(--red);color:var(--red);padding:2px 5px" onclick="rmMic(${m.id})"><i class="ti ti-x"></i></button></td></tr>`;
+    } else {
+      const im=it.d;
+      const mHit=S.mics.find(m=>Math.abs(m.freq-im.freq)<0.15);
+      const src=im.f3!=null?`${im.f1?.toFixed(3)}, ${im.f2?.toFixed(3)}, ${im.f3?.toFixed(3)}`:`${im.f1?.toFixed(3)} / ${im.f2?.toFixed(3)}`;
+      h+=`<tr class="${im.ord===3?'r-im3':'r-im5'}">
+        <td><span class="badge ${im.ord===3?'bIM3':'bIM5'}">IM${im.ord}</span></td>
+        <td style="font-size:11px;color:var(--text2)">${im.type}</td>
+        <td colspan="2" style="font-family:monospace;color:var(--text2)">${im.freq} MHz</td>
+        <td style="font-size:10px;color:var(--text2)">${src}</td>
+        <td></td>
+        <td>${mHit?`<span class="badge bErr">⚠ ${mHit.name}</span>`:'—'}</td>
+        <td></td></tr>`;
+    }
+  });
+  h+='</tbody></table>';
+  w.innerHTML=h;
+}
+
+function rmMic(id){S.mics=S.mics.filter(m=>m.id!==id);computeIM();renderAll();}
+
+// ── SPECTRUM ──────────────────────────────────────────────────────────
+function drawSpec(){
+  const cv=document.getElementById('cv');
+  const ctx=cv.getContext('2d');
+  const W=cv.parentElement.offsetWidth-32||640,H=180;
+  const D=window.devicePixelRatio||1;
+  cv.width=W*D;cv.height=H*D;cv.style.width=W+'px';cv.style.height=H+'px';
+  ctx.scale(D,D);
+  const dark=matchMedia('(prefers-color-scheme:dark)').matches;
+  ctx.clearRect(0,0,W,H);
+  const FMIN=470,FMAX=694,FR=FMAX-FMIN,BH=H-22;
+  const fx=f=>(f-FMIN)/FR*W;
+
+  ctx.strokeStyle=dark?'rgba(255,255,255,.05)':'rgba(0,0,0,.05)';
+  ctx.lineWidth=.5;
+  for(let f=478;f<FMAX;f+=8){ctx.beginPath();ctx.moveTo(fx(f),0);ctx.lineTo(fx(f),BH);ctx.stroke();}
+
+  S.ch.forEach(c=>{
+    if(c.freq_end<=FMIN||c.freq_start>=FMAX) return;
+    const x1=fx(Math.max(c.freq_start,FMIN))+.5,x2=fx(Math.min(c.freq_end,FMAX))-.5,w=x2-x1;
+    ctx.fillStyle=c.occupied?(dark?'rgba(163,45,45,.25)':'rgba(163,45,45,.1)'):(dark?'rgba(59,109,17,.2)':'rgba(59,109,17,.08)');
+    ctx.fillRect(x1,0,w,BH);
+    ctx.strokeStyle=c.occupied?'#A32D2D':'#639922';
+    ctx.lineWidth=.5;ctx.strokeRect(x1,.5,w,BH-1);
+    if(w>14){
+      ctx.fillStyle=c.occupied?'#A32D2D':'#3B6D11';
+      ctx.font=`${Math.min(10,w/3.5)}px sans-serif`;ctx.textAlign='center';
+      ctx.fillText('C'+c.ch,x1+w/2,BH/2+4);
+    }
+  });
+
+  if(S.show5) S.im.filter(im=>im.ord===5&&(!S.onlyB||(im.freq>=FMIN&&im.freq<=FMAX))).forEach(im=>{
+    const x=fx(im.freq);
+    ctx.strokeStyle='rgba(186,117,23,.5)';ctx.lineWidth=.8;ctx.setLineDash([2,4]);
+    ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,BH);ctx.stroke();ctx.setLineDash([]);
+  });
+
+  if(S.show3) S.im.filter(im=>im.ord===3&&(!S.onlyB||(im.freq>=FMIN&&im.freq<=FMAX))).forEach(im=>{
+    const x=fx(im.freq);
+    ctx.strokeStyle='rgba(133,79,11,.7)';ctx.lineWidth=1.2;ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,BH);ctx.stroke();ctx.setLineDash([]);
+  });
+
+  S.mics.forEach((m,i)=>{
+    if(m.freq<FMIN||m.freq>FMAX) return;
+    const xc=fx(m.freq),bwPx=fx(m.freq+m.bw/2000)-fx(m.freq);
+    ctx.fillStyle=m.color+'22';ctx.fillRect(xc-bwPx,0,bwPx*2,BH);
+    ctx.fillStyle=m.color;ctx.fillRect(xc-1.5,0,3,BH);
+    ctx.font='bold 9px sans-serif';ctx.textAlign='center';ctx.fillStyle=m.color;
+    ctx.fillText('M'+(i+1),xc,10);
+  });
+
+  ctx.fillStyle=dark?'rgba(255,255,255,.4)':'rgba(0,0,0,.4)';
+  ctx.font='9px sans-serif';ctx.textAlign='center';
+  for(let f=480;f<=690;f+=10) ctx.fillText(f,fx(f),H-5);
+  ctx.textAlign='left';ctx.fillText('MHz',2,H-5);
+}
+
+document.getElementById('ck3').onchange=e=>{S.show3=e.target.checked;renderAll();};
+document.getElementById('ck5').onchange=e=>{S.show5=e.target.checked;renderAll();};
+document.getElementById('ckB').onchange=e=>{S.onlyB=e.target.checked;renderAll();};
+
+document.getElementById('csvBtn').onclick=()=>{
+  const rows=['Nom,Fréquence (MHz),Plage min,Plage max,BW (kHz),Conflit TNT,Conflits IM'];
+  S.mics.forEach(m=>rows.push(`${m.name},${m.freq},${m.fmin},${m.fmax},${m.bw},${m.tntConflict?'OUI':'non'},${m.imHits?m.imHits.length:0}`));
+  const b=new Blob([rows.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);
+  a.download='easyrf_plan_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+};
+
+function setSt(t){document.getElementById('st').textContent=t;}
+window.addEventListener('resize',()=>drawSpec());
+drawSpec();
+</script>
+</body>
+</html>

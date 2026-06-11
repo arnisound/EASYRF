@@ -1,0 +1,51 @@
+# EASYRF — Coordinateur PMSE RF France
+
+Application de planification fréquences pour microphones sans fil (PMSE), basée sur les données de couverture TNT de l'ANFR.
+
+## Structure
+
+```
+EASYRF/
+├── frontend/
+│   └── index.html        # App standalone (ouvrir dans le navigateur)
+├── backend/
+│   ├── server.js         # Proxy ANFR (Node.js / Express)
+│   └── package.json
+└── docs/
+```
+
+## Démarrage rapide
+
+### Frontend seul (sans données ANFR live)
+Ouvrir `frontend/index.html` directement dans le navigateur.
+L'agent IA Claude fournit les données TNT automatiquement.
+
+### Avec le backend ANFR (données live)
+```bash
+cd backend
+npm install
+node server.js
+# → http://localhost:3001
+```
+Puis ouvrir `frontend/index.html` — le backend est détecté automatiquement.
+
+## Fonctionnalités
+
+- **Géolocalisation** GPS ou saisie manuelle de coordonnées
+- **Données TNT** : canaux UHF C21–C48 (470–694 MHz) depuis l'ANFR
+- **45+ modèles** de micros sans fil : Shure, Sennheiser, Sony, Audio-Technica, Wisycom, Lectrosonics, Røde, DJI + retours IEM
+- **Calcul IM3 + IM5** : produits d'intermodulation ordres 3 et 5 (paires et triplets)
+- **Plan automatique** : placement optimal des porteuses avec les IM3/IM5 dirigés dans les canaux TV occupés ("poubelle")
+- **Tableau unifié** : canaux TNT + porteuses micros + produits IM triés par fréquence
+- **Visualisation spectre** : 470–694 MHz avec canaux, micros et IM
+- **Export CSV**
+
+## API Backend
+
+```
+GET /api/tnt?lat=43.9493&lon=4.8055
+GET /api/health
+```
+
+## Licence
+MIT
