@@ -310,9 +310,15 @@ function extractChannels(payload){
   return channels;
 }
 
-// Relais CORS publics, essayés dans l'ordre (le navigateur ne peut pas
-// appeler l'ANFR directement depuis un autre domaine).
+// Relais dédié (Deno Deploy). Renseigner l'URL de ton service ici, ex. :
+//   const RELAY='https://easyrf-xxxx.deno.dev';
+// Tant qu'il est vide, l'app se rabat sur les relais publics ci-dessous.
+const RELAY='';
+
+// Relais CORS, essayés dans l'ordre. Le relais dédié (s'il est configuré)
+// passe en premier ; viennent ensuite des relais publics de secours.
 const PROXIES=[
+  ...(RELAY?[u=>RELAY.replace(/\/$/,'')+'/?url='+encodeURIComponent(u)]:[]),
   u=>'https://corsproxy.io/?url='+encodeURIComponent(u),
   u=>'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u),
   u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u),
