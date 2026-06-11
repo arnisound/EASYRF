@@ -310,18 +310,32 @@ function extractChannels(payload){
   return channels;
 }
 
+// Récupère une URL en JSON ; en cas de blocage CORS (TypeError « Failed to
+// fetch »), réessaie via un relais public qui ajoute les en-têtes CORS.
+async function fetchJSONviaProxy(url,opts,label){
+  try{
+    const r=await fetch(url,opts);
+    if(!r.ok) throw new Error(label+' HTTP '+r.status);
+    return await r.json();
+  }catch(e){
+    if(e instanceof Error && e.message.includes('HTTP')) throw e; // vraie erreur HTTP
+    // probable blocage CORS → relais public
+    const prox='https://api.allorigins.win/raw?url='+encodeURIComponent(url);
+    const r2=await fetch(prox,{signal:AbortSignal.timeout(15000)});
+    if(!r2.ok) throw new Error(label+' (relais) HTTP '+r2.status);
+    return await r2.json();
+  }
+}
+
 async function getTNTDirect(lat,lon){
   // 1) géocodage inverse → code INSEE
-  const geoR=await fetch(`https://api-adresse.data.gouv.fr/reverse/?lon=${lon}&lat=${lat}`,{signal:AbortSignal.timeout(8000)});
-  if(!geoR.ok) throw new Error('géocodage HTTP '+geoR.status);
-  const geo=await geoR.json();
+  const geo=await fetchJSONviaProxy(`https://api-adresse.data.gouv.fr/reverse/?lon=${lon}&lat=${lat}`,{signal:AbortSignal.timeout(8000)},'géocodage');
   const props=geo.features&&geo.features[0]&&geo.features[0].properties;
   if(!props||!props.citycode) throw new Error('aucune commune (point en mer ou hors France ?)');
   // 2) couverture TNT
-  const r=await fetch(`https://scanfrequences.anfr.fr/api/data?lat=${lat}&lng=${lon}&insee=${props.citycode}`,{signal:AbortSignal.timeout(12000)});
-  if(!r.ok) throw new Error('ANFR HTTP '+r.status);
-  const channels=extractChannels(await r.json());
-  if(!channels) throw new Error('structure de réponse ANFR inattendue');
+  const payload=await fetchJSONviaProxy(`https://scanfrequences.anfr.fr/api/data?lat=${lat}&lng=${lon}&insee=${props.citycode}`,{signal:AbortSignal.timeout(12000)},'ANFR');
+  const channels=extractChannels(payload);
+  if(!channels) throw new Error('réponse ANFR reçue mais structure non reconnue');
   const city=props.city||props.label||null;
   return {source:'anfr_live',source_label:'ANFR'+(city?' — '+city:''),channels};
 }
