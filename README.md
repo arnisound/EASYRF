@@ -13,22 +13,29 @@ EASYRF/
     └── package.json
 ```
 
-## Démarrage rapide
+## Utilisation
 
-Le backend est requis pour la capture TNT (il interroge les serveurs de l'ANFR) :
+L'application fonctionne directement dans le navigateur, sans rien installer.
+Une fois GitHub Pages activé (voir ci-dessous), ouvrir l'adresse publiée,
+entrer ses coordonnées GPS puis cliquer « Analyser TNT ».
+
+### Activer le lien web (GitHub Pages)
+1. Dépôt GitHub → **Settings** → **Pages**
+2. **Build and deployment** → **Source** : choisir **GitHub Actions**
+3. Le workflow `.github/workflows/pages.yml` publie le site à chaque push.
+   L'URL apparaît dans Settings → Pages (du type `https://arnisound.github.io/easyrf/`).
+
+### Usage local (optionnel)
+Ouvrir `frontend/index.html` directement dans le navigateur. Si les appels
+directs à l'ANFR sont bloqués (CORS), lancer le backend de secours :
 
 ```bash
-cd backend
-npm install
-node server.js
-# → http://localhost:3001
+cd backend && npm install && node server.js   # → http://localhost:3001
 ```
-
-Puis ouvrir `frontend/index.html` dans le navigateur — le backend est détecté automatiquement.
 
 ## Source des données
 
-Le backend utilise la même API que le site officiel [scanfrequences.anfr.fr](https://scanfrequences.anfr.fr/) :
+L'app utilise la même API que le site officiel [scanfrequences.anfr.fr](https://scanfrequences.anfr.fr/) :
 
 1. `api-adresse.data.gouv.fr/reverse/` — convertit les coordonnées GPS en code INSEE de commune
 2. `scanfrequences.anfr.fr/api/data?lat=&lng=&insee=` — renvoie les canaux TNT reçus à ce point (station, multiplex, niveaux indoor/outdoor en dBµV/m)

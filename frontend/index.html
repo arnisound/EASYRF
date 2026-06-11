@@ -108,7 +108,7 @@ tr:hover td{background:var(--bg2)}
   <div class="header-sub">Coordinateur PMSE · France · 470–694 MHz</div>
   <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
     <div class="backend-pill off" id="backendPill">
-      <div class="pulse"></div><span id="backendTxt">Backend hors ligne</span>
+      <div class="pulse"></div><span id="backendTxt">Données ANFR en direct</span>
     </div>
     <span style="font-size:10px;color:var(--text3)">v1.0</span>
   </div>
@@ -260,7 +260,7 @@ tr:hover td{background:var(--bg2)}
 
 <div class="bar">
   <i class="ti ti-info-circle"></i>
-  <span id="st">Prêt — backend: <code>npm install && node server.js</code> dans /backend</span>
+  <span id="st">Prêt — entrez vos coordonnées GPS puis cliquez « Analyser TNT »</span>
   <span style="margin-left:auto;font-size:11px;color:var(--text3)" id="sts"></span>
 </div>
 </div>
@@ -271,19 +271,79 @@ const MC=['#185FA5','#993556','#3B6D11','#854F0B','#534AB7','#0F6E56','#D85A30',
 const S={lat:43.9493,lon:4.8055,ch:[],mics:[],im:[],show3:true,show5:false,onlyB:true,_fmin:470,_fmax:694,_bw:200,planSlots:[]};
 const BACKEND='http://localhost:3001';
 
-// ── Backend health check ──────────────────────────────────────────────
+// ── Couche données TNT ────────────────────────────────────────────────
+// Stratégie : appel direct aux API depuis le navigateur (fonctionne en
+// ligne sur GitHub Pages, sans serveur). Si l'ANFR refuse l'appel
+// cross-origin (CORS), on bascule sur le backend local s'il tourne.
+
+function chanFreqStart(ch){return 302+ch*8;}
+function normKey(k){return k.toLowerCase().replace(/[^a-z0-9]/g,'');}
+function pick(obj,names){for(const k of Object.keys(obj)){if(names.includes(normKey(k)))return obj[k];}return undefined;}
+const FIELDS={
+  ch:['canal','channel','ch','numcanal','numerocanal','num'],
+  mux:['multiplex','mux','plex','nommultiplex'],
+  station:['station','nomstation','emetteur','site','nom','libelle'],
+  indoor:['indoor','interieur','int','niveauindoor'],
+  outdoor:['outdoor','exterieur','ext','niveauoutdoor'],
+  out10:['outdoor10m','outdoor10','exterieur10m','ext10m'],
+};
+function looksLikeChannel(o){if(!o||typeof o!=='object'||Array.isArray(o))return false;const ch=parseInt(pick(o,FIELDS.ch));return !isNaN(ch)&&ch>=21&&ch<=60;}
+function collectArrays(node,out){out=out||[];if(Array.isArray(node)){out.push(node);node.forEach(n=>collectArrays(n,out));}else if(node&&typeof node==='object'){Object.values(node).forEach(v=>collectArrays(v,out));}return out;}
+function extractChannels(payload){
+  let best=null,bestScore=0;
+  for(const arr of collectArrays(payload)){const score=arr.filter(looksLikeChannel).length;if(score>bestScore){best=arr;bestScore=score;}}
+  if(!best)return null;
+  const num=v=>{const n=parseFloat(v);return isNaN(n)?null:n;};
+  const byCh=new Map();
+  for(const item of best){
+    if(!looksLikeChannel(item))continue;
+    const ch=parseInt(pick(item,FIELDS.ch));
+    const muxV=pick(item,FIELDS.mux),staV=pick(item,FIELDS.station);
+    byCh.set(ch,{mux:muxV!=null&&muxV!==''?String(muxV):null,station:staV!=null&&staV!==''?String(staV):null,indoor:num(pick(item,FIELDS.indoor)),outdoor:num(pick(item,FIELDS.outdoor)),outdoor10m:num(pick(item,FIELDS.out10))});
+  }
+  if(byCh.size===0)return null;
+  const channels=[];
+  for(let ch=21;ch<=48;ch++){
+    const d=byCh.get(ch),freqStart=chanFreqStart(ch);
+    channels.push({ch,freq_start:freqStart,freq_end:freqStart+8,occupied:!!d,mux:d?d.mux:null,station:d?d.station:null,indoor_dbuvm:d?d.indoor:null,outdoor_dbuvm:d?d.outdoor:null,outdoor10m_dbuvm:d?d.outdoor10m:null,level_dbm:d&&d.outdoor!=null?parseFloat((d.outdoor-109.5).toFixed(1)):null});
+  }
+  return channels;
+}
+
+async function getTNTDirect(lat,lon){
+  // 1) géocodage inverse → code INSEE
+  const geoR=await fetch(`https://api-adresse.data.gouv.fr/reverse/?lon=${lon}&lat=${lat}`,{signal:AbortSignal.timeout(8000)});
+  if(!geoR.ok) throw new Error('géocodage HTTP '+geoR.status);
+  const geo=await geoR.json();
+  const props=geo.features&&geo.features[0]&&geo.features[0].properties;
+  if(!props||!props.citycode) throw new Error('aucune commune (point en mer ou hors France ?)');
+  // 2) couverture TNT
+  const r=await fetch(`https://scanfrequences.anfr.fr/api/data?lat=${lat}&lng=${lon}&insee=${props.citycode}`,{signal:AbortSignal.timeout(12000)});
+  if(!r.ok) throw new Error('ANFR HTTP '+r.status);
+  const channels=extractChannels(await r.json());
+  if(!channels) throw new Error('structure de réponse ANFR inattendue');
+  const city=props.city||props.label||null;
+  return {source:'anfr_live',source_label:'ANFR'+(city?' — '+city:''),channels};
+}
+
+async function getTNTBackend(lat,lon){
+  const r=await fetch(`${BACKEND}/api/tnt?lat=${lat}&lon=${lon}`,{signal:AbortSignal.timeout(20000)});
+  const data=await r.json();
+  if(!r.ok) throw new Error(data.error||('HTTP '+r.status));
+  return data;
+}
+
 async function checkBackend(){
   try{
     const r=await fetch(BACKEND+'/api/health',{signal:AbortSignal.timeout(2000)});
     if(r.ok){
       const pill=document.getElementById('backendPill');
       pill.className='backend-pill ok';
-      document.getElementById('backendTxt').textContent='Backend connecté';
+      document.getElementById('backendTxt').textContent='Backend local connecté';
     }
   }catch(_){}
 }
 checkBackend();
-setInterval(checkBackend,15000);
 
 // ── TABS ──────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
@@ -318,15 +378,14 @@ document.getElementById('scanBtn').onclick=async()=>{
   setSt('Analyse TNT en cours...');
   document.getElementById('scanBtn').disabled=true;
   try {
-    let r;
+    let data;
     try{
-      r=await fetch(`${BACKEND}/api/tnt?lat=${S.lat}&lon=${S.lon}`,{signal:AbortSignal.timeout(20000)});
-    }catch(_){
-      throw new Error('backend injoignable — lancez « npm install && node server.js » dans /backend');
+      data=await getTNTDirect(S.lat,S.lon);          // appel direct (en ligne)
+    }catch(directErr){
+      try{ data=await getTNTBackend(S.lat,S.lon); }   // repli backend local
+      catch(_){ throw new Error('données TNT inaccessibles ('+directErr.message+')'); }
     }
-    const data=await r.json();
-    if(!r.ok) throw new Error(data.error||('HTTP '+r.status));
-    if(!data.channels||!data.channels.length) throw new Error('réponse backend sans canaux');
+    if(!data.channels||!data.channels.length) throw new Error('aucun canal renvoyé');
     S.ch=data.channels;
     const occ=S.ch.filter(c=>c.occupied).length;
     setSt(`✓ ${data.source_label||data.source||'Données chargées'} — ${occ} canaux occupés, ${S.ch.length-occ} libres`);
