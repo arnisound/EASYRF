@@ -8,10 +8,9 @@ Application de planification fréquences pour microphones sans fil (PMSE), basé
 EASYRF/
 ├── frontend/
 │   └── index.html        # App standalone (ouvrir dans le navigateur)
-├── backend/
-│   ├── server.js         # Proxy ANFR (Node.js / Express)
-│   └── package.json
-└── docs/
+└── backend/
+    ├── server.js         # Proxy ANFR (Node.js / Express)
+    └── package.json
 ```
 
 ## Démarrage rapide
