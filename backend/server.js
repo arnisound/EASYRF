@@ -1,9 +1,13 @@
 /**
- * PMSE RF Coordinator — Backend proxy ANFR
- * ==========================================
- * Récupère les données de couverture TNT depuis scanfrequences.anfr.fr
+ * EASYRF — Backend proxy TNT
+ * ===========================
+ * Récupère la couverture TNT réelle via la même API que le site officiel
+ * scanfrequences.anfr.fr :
+ *   1. https://api-adresse.data.gouv.fr/reverse/  → code INSEE de la commune
+ *   2. https://scanfrequences.anfr.fr/api/data?lat=&lng=&insee=  → canaux TNT
+ *
  * Endpoints :
- *   GET /api/tnt?lat=43.94&lon=4.80
+ *   GET /api/tnt?lat=43.63&lon=3.91
  *   GET /api/health
  */
 
@@ -15,138 +19,130 @@ const app  = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors({ origin: '*', methods: ['GET', 'OPTIONS'] }));
-app.use(express.json());
 
-function chanToFreq(ch) { return 306 + ch * 8; }
+const BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept': 'application/json, text/plain, */*',
+  'Accept-Language': 'fr-FR,fr;q=0.9',
+  'Referer': 'https://scanfrequences.anfr.fr/',
+};
 
-function parseAnfrHtml(html) {
+// Canal UHF C21 = 470–478 MHz, pas de 8 MHz
+function chanFreqStart(ch) { return 302 + ch * 8; }
+
+async function reverseGeocode(lat, lon) {
+  const url = `https://api-adresse.data.gouv.fr/reverse/?lon=${lon}&lat=${lat}`;
+  console.log(`[GEO]  → ${url}`);
+  const res = await fetch(url, { headers: BROWSER_HEADERS, timeout: 8000 });
+  if (!res.ok) throw new Error(`Géocodage inverse : HTTP ${res.status}`);
+  const j = await res.json();
+  const props = j.features && j.features[0] && j.features[0].properties;
+  if (!props || !props.citycode)
+    throw new Error('Aucune commune trouvée pour ces coordonnées (point en mer ou hors France ?)');
+  return { insee: props.citycode, city: props.city || props.label || null };
+}
+
+// ── Parsing défensif de la réponse scanfrequences ──────────────────────────
+// Les noms de champs exacts du JSON ANFR pouvant varier, on cherche dans la
+// réponse le tableau dont les éléments ressemblent à des canaux TNT, puis on
+// lit chaque champ via une liste de noms candidats.
+
+function normKey(k) { return k.toLowerCase().replace(/[^a-z0-9]/g, ''); }
+
+function pick(obj, names) {
+  for (const k of Object.keys(obj)) {
+    if (names.includes(normKey(k))) return obj[k];
+  }
+  return undefined;
+}
+
+const FIELDS = {
+  ch:      ['canal', 'channel', 'ch', 'numcanal', 'numerocanal', 'num'],
+  mux:     ['multiplex', 'mux', 'plex', 'nommultiplex'],
+  station: ['station', 'nomstation', 'emetteur', 'site', 'nom', 'libelle'],
+  indoor:  ['indoor', 'interieur', 'int', 'niveauindoor'],
+  outdoor: ['outdoor', 'exterieur', 'ext', 'niveauoutdoor'],
+  out10:   ['outdoor10m', 'outdoor10', 'exterieur10m', 'ext10m'],
+};
+
+function looksLikeChannel(o) {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return false;
+  const ch = parseInt(pick(o, FIELDS.ch));
+  return !isNaN(ch) && ch >= 21 && ch <= 60;
+}
+
+function collectArrays(node, out = []) {
+  if (Array.isArray(node)) {
+    out.push(node);
+    node.forEach(n => collectArrays(n, out));
+  } else if (node && typeof node === 'object') {
+    Object.values(node).forEach(v => collectArrays(v, out));
+  }
+  return out;
+}
+
+function extractChannels(payload) {
+  let best = null, bestScore = 0;
+  for (const arr of collectArrays(payload)) {
+    const score = arr.filter(looksLikeChannel).length;
+    if (score > bestScore) { best = arr; bestScore = score; }
+  }
+  if (!best) return null;
+
+  const num = v => { const n = parseFloat(v); return isNaN(n) ? null : n; };
+  const byCh = new Map();
+  for (const item of best) {
+    if (!looksLikeChannel(item)) continue;
+    const ch = parseInt(pick(item, FIELDS.ch));
+    const muxV = pick(item, FIELDS.mux);
+    const staV = pick(item, FIELDS.station);
+    byCh.set(ch, {
+      mux:        muxV != null && muxV !== '' ? String(muxV) : null,
+      station:    staV != null && staV !== '' ? String(staV) : null,
+      indoor:     num(pick(item, FIELDS.indoor)),
+      outdoor:    num(pick(item, FIELDS.outdoor)),
+      outdoor10m: num(pick(item, FIELDS.out10)),
+    });
+  }
+  if (byCh.size === 0) return null;
+
   const channels = [];
-  const tableRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-  const cellRegex  = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
-  let match;
-  while ((match = tableRegex.exec(html)) !== null) {
-    const row = match[1];
-    const cells = [];
-    let cell;
-    const cr = new RegExp(cellRegex.source, 'gi');
-    while ((cell = cr.exec(row)) !== null) {
-      cells.push(cell[1].replace(/<[^>]+>/g, '').trim());
-    }
-    if (cells.length >= 7) {
-      const ch = parseInt(cells[1]);
-      if (!isNaN(ch) && ch >= 21 && ch <= 60) {
-        const freqStart = parseFloat(cells[2]) || chanToFreq(ch);
-        const mux = cells[4] || null;
-        const outdoor = parseFloat(cells[6]) || null;
-        const indoor  = parseFloat(cells[7]) || null;
-        channels.push({
-          ch, freq_start: freqStart, freq_end: freqStart + 8,
-          occupied: mux !== null && mux !== '' && mux !== '-',
-          mux: (mux && mux !== '-') ? mux : null,
-          station: cells[0] || null,
-          outdoor_dbuvm: outdoor, indoor_dbuvm: indoor,
-          level_dbm: outdoor ? parseFloat((outdoor - 109.5).toFixed(1)) : null,
-        });
-      }
-    }
+  for (let ch = 21; ch <= 48; ch++) {
+    const d = byCh.get(ch);
+    const freqStart = chanFreqStart(ch);
+    channels.push({
+      ch, freq_start: freqStart, freq_end: freqStart + 8,
+      occupied: !!d,
+      mux:     d ? d.mux : null,
+      station: d ? d.station : null,
+      indoor_dbuvm:     d ? d.indoor : null,
+      outdoor_dbuvm:    d ? d.outdoor : null,
+      outdoor10m_dbuvm: d ? d.outdoor10m : null,
+      // approximation affichée par le frontend : dBm ≈ dBµV/m − 109.5
+      level_dbm: d && d.outdoor != null ? parseFloat((d.outdoor - 109.5).toFixed(1)) : null,
+    });
   }
   return channels;
 }
 
-async function fetchAnfrData(lat, lon) {
-  const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8',
-    'Accept-Language': 'fr-FR,fr;q=0.9',
-    'Referer': 'https://scanfrequences.anfr.fr/',
-  };
-  const urls = [
-    `https://scanfrequences.anfr.fr/Graphique?lat=${lat}&lon=${lon}`,
-    `https://scanfrequences.anfr.fr/?lat=${lat}&lon=${lon}`,
-  ];
-  for (const url of urls) {
-    try {
-      console.log(`[ANFR] → ${url}`);
-      const res = await fetch(url, { headers, redirect: 'follow', timeout: 8000 });
-      if (res.ok) {
-        const text = await res.text();
-        if (text.includes('<tr') && text.length > 500) {
-          const channels = parseAnfrHtml(text);
-          if (channels.length > 0) {
-            console.log(`[ANFR] ✓ ${channels.length} canaux`);
-            return { source: 'anfr_live', channels };
-          }
-        }
-      }
-    } catch (e) { console.warn(`[ANFR] Échec: ${e.message}`); }
+async function fetchAnfr(lat, lon, insee) {
+  const url = `https://scanfrequences.anfr.fr/api/data?lat=${lat}&lng=${lon}&insee=${insee}`;
+  console.log(`[ANFR] → ${url}`);
+  const res = await fetch(url, { headers: BROWSER_HEADERS, timeout: 10000 });
+  if (!res.ok) throw new Error(`scanfrequences.anfr.fr : HTTP ${res.status}`);
+  const text = await res.text();
+  let payload;
+  try { payload = JSON.parse(text); }
+  catch {
+    const e = new Error('Réponse ANFR non-JSON (structure inattendue)');
+    e.raw = text.slice(0, 2000);
+    throw e;
   }
-  console.log(`[ANFR] Repli plan théorique pour ${lat}, ${lon}`);
-  return { source: 'theoretical', channels: theoreticalPlan(lat, lon) };
-}
-
-function theoreticalPlan(lat, lon) {
-  const zones = [
-    { latC:48.85, lonC:2.35,  name:'Paris / Île-de-France',  emetteur:'Tour Eiffel',        occupied:[21,22,24,25,27,28,29,30,33,34,38,40,42,44,45,46] },
-    { latC:45.75, lonC:4.85,  name:'Lyon',                   emetteur:'Mont Pilat',          occupied:[22,25,26,28,30,33,35,38,40,43,45,47] },
-    { latC:43.30, lonC:5.37,  name:'Marseille / PACA',       emetteur:'Mont Faron',          occupied:[22,24,25,27,29,32,34,36,38,41,43,46,48] },
-    { latC:43.95, lonC:4.80,  name:'Avignon / Vaucluse',     emetteur:'Mont Ventoux',        occupied:[21,23,26,28,31,33,36,38,41,43,46,48] },
-    { latC:44.84, lonC:-0.58, name:'Bordeaux',                emetteur:'Pinède Gradignan',    occupied:[23,25,26,28,30,34,37,39,41,43,46,48] },
-    { latC:43.60, lonC:1.44,  name:'Toulouse',                emetteur:'Pic du Midi',         occupied:[22,24,26,28,31,33,36,38,41,43,45,47] },
-    { latC:47.22, lonC:-1.55, name:'Nantes',                  emetteur:'Nantes principal',    occupied:[21,23,25,28,30,32,36,38,40,43,45,47] },
-    { latC:50.63, lonC:3.07,  name:'Lille / Nord',            emetteur:'Mont Cassel',         occupied:[21,22,25,27,30,32,34,37,39,42,44,46] },
-    { latC:48.58, lonC:7.75,  name:'Strasbourg / Alsace',    emetteur:'Grand Ballon',        occupied:[22,24,26,29,31,33,35,38,40,43,45,47] },
-    { latC:48.11, lonC:-1.68, name:'Rennes / Bretagne',       emetteur:'Rennes Ille',         occupied:[22,24,26,28,31,33,35,38,40,42,44,47] },
-    { latC:43.71, lonC:7.26,  name:'Nice / Côte d\'Azur',    emetteur:'Mont Agel',           occupied:[21,23,25,28,30,33,35,38,40,43,45,48] },
-    { latC:45.18, lonC:5.72,  name:'Grenoble',                emetteur:'Chamrousse',          occupied:[22,24,27,29,32,34,37,39,42,44,46,48] },
-    { latC:48.57, lonC:7.75,  name:'Nancy / Lorraine',       emetteur:'Donon',               occupied:[23,25,27,30,32,35,37,40,42,45,47] },
-    { latC:49.44, lonC:1.10,  name:'Rouen / Normandie',      emetteur:'Rouen-Elbeuf',        occupied:[21,24,26,28,31,33,36,38,41,43,46,48] },
-    { latC:43.12, lonC:3.00,  name:'Montpellier',             emetteur:'Pic Saint-Loup',      occupied:[22,25,27,29,32,34,37,39,42,44,47] },
-    { latC:47.32, lonC:5.04,  name:'Dijon / Bourgogne',      emetteur:'Mont Afrique',        occupied:[23,25,28,30,33,35,38,40,43,45,48] },
-    { latC:45.65, lonC:0.16,  name:'Angoulême / Poitou',     emetteur:'Royan',               occupied:[22,24,27,29,32,34,37,39,42,44,47] },
-    { latC:49.90, lonC:2.30,  name:'Amiens / Picardie',      emetteur:'Amiens',              occupied:[22,25,27,30,32,35,37,40,42,45,47] },
-    { latC:43.30, lonC:3.22,  name:'Béziers / Hérault',      emetteur:'La Gardiole',         occupied:[21,23,26,28,31,33,36,38,41,43,46] },
-    { latC:44.93, lonC:6.07,  name:'Briançon / Alpes',       emetteur:'Serre-Chevalier',     occupied:[22,24,27,29,32,35,38,41,44,47] },
-  ];
-
-  let bestZone = zones[0], bestDist = Infinity;
-  for (const z of zones) {
-    const d = Math.sqrt(Math.pow(lat - z.latC, 2) + Math.pow(lon - z.lonC, 2));
-    if (d < bestDist) { bestDist = d; bestZone = z; }
-  }
-
-  const MUX = ['R1','R2','R3','R4','R5','R6','R7','R8'];
-  const MUX_CONTENT = {
-    R1:'TF1, France 2, M6, Arte, France 5',
-    R2:'France 3 régional',
-    R3:'TMC, TFX, TF1 SF, LCI',
-    R4:'C8, CNews, CStar, Gulli',
-    R5:'France 4, BFM TV, RMC Découverte',
-    R6:'W9, 6ter, Téva, Paris Première',
-    R7:'Local HD',
-    R8:'Local / TNT+',
-  };
-
-  let muxIdx = 0;
-  const channels = [];
-  for (let ch = 21; ch <= 48; ch++) {
-    const freqStart = chanToFreq(ch);
-    const occupied  = bestZone.occupied.includes(ch);
-    let mux = null, muxContent = null;
-    if (occupied) {
-      mux = MUX[muxIdx % MUX.length];
-      muxContent = MUX_CONTENT[mux];
-      muxIdx++;
-    }
-    const outdoor = occupied ? (55 + (ch % 20)) : null;
-    channels.push({
-      ch, freq_start: freqStart, freq_end: freqStart + 8,
-      occupied, mux, mux_content: muxContent,
-      station: occupied ? bestZone.emetteur : null,
-      location_name: bestZone.name,
-      outdoor_dbuvm: outdoor,
-      indoor_dbuvm: outdoor ? Math.max(0, outdoor - 14) : null,
-      level_dbm: outdoor ? parseFloat((outdoor - 109.5).toFixed(1)) : null,
-    });
+  const channels = extractChannels(payload);
+  if (!channels) {
+    const e = new Error('Structure de réponse ANFR inattendue — voir le champ "raw"');
+    e.raw = text.slice(0, 2000);
+    throw e;
   }
   return channels;
 }
@@ -154,7 +150,7 @@ function theoreticalPlan(lat, lon) {
 // ── Routes ──────────────────────────────────────────────────────────────────
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', version: '1.0.0', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', version: '2.0.0', timestamp: new Date().toISOString() });
 });
 
 app.get('/api/tnt', async (req, res) => {
@@ -166,25 +162,31 @@ app.get('/api/tnt', async (req, res) => {
     return res.status(400).json({ error: 'Coordonnées hors France métropolitaine' });
   try {
     console.log(`[API] /api/tnt lat=${lat} lon=${lon}`);
-    const result = await fetchAnfrData(lat, lon);
-    const occupied = result.channels.filter(c => c.occupied).length;
+    const geo = await reverseGeocode(lat, lon);
+    const channels = await fetchAnfr(lat, lon, geo.insee);
+    const occupied = channels.filter(c => c.occupied).length;
+    console.log(`[ANFR] ✓ ${geo.city || geo.insee} — ${occupied} canaux occupés`);
     res.json({
       lat, lon,
-      source: result.source,
-      source_label: { anfr_live:'ANFR live', anfr_json:'ANFR JSON', theoretical:'Plan théorique' }[result.source] || result.source,
-      channels_count: result.channels.length,
+      insee: geo.insee,
+      city: geo.city,
+      source: 'anfr_live',
+      source_label: `ANFR${geo.city ? ' — ' + geo.city : ''}`,
+      channels_count: channels.length,
       occupied_count: occupied,
-      free_count: result.channels.length - occupied,
-      channels: result.channels,
+      free_count: channels.length - occupied,
+      channels,
     });
   } catch (err) {
-    console.error('[API]', err);
-    res.status(500).json({ error: 'Erreur interne', detail: err.message });
+    console.error('[API]', err.message);
+    const body = { error: err.message };
+    if (err.raw) body.raw = err.raw;
+    res.status(502).json(body);
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`\nPMSE RF Backend démarré sur http://localhost:${PORT}`);
-  console.log(`  GET /api/tnt?lat=43.94&lon=4.80`);
+  console.log(`\nEASYRF Backend démarré sur http://localhost:${PORT}`);
+  console.log(`  GET /api/tnt?lat=43.63&lon=3.91`);
   console.log(`  GET /api/health\n`);
 });

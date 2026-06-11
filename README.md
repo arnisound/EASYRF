@@ -15,18 +15,25 @@ EASYRF/
 
 ## Démarrage rapide
 
-### Frontend seul (sans données ANFR live)
-Ouvrir `frontend/index.html` directement dans le navigateur.
-L'agent IA Claude fournit les données TNT automatiquement.
+Le backend est requis pour la capture TNT (il interroge les serveurs de l'ANFR) :
 
-### Avec le backend ANFR (données live)
 ```bash
 cd backend
 npm install
 node server.js
 # → http://localhost:3001
 ```
-Puis ouvrir `frontend/index.html` — le backend est détecté automatiquement.
+
+Puis ouvrir `frontend/index.html` dans le navigateur — le backend est détecté automatiquement.
+
+## Source des données
+
+Le backend utilise la même API que le site officiel [scanfrequences.anfr.fr](https://scanfrequences.anfr.fr/) :
+
+1. `api-adresse.data.gouv.fr/reverse/` — convertit les coordonnées GPS en code INSEE de commune
+2. `scanfrequences.anfr.fr/api/data?lat=&lng=&insee=` — renvoie les canaux TNT reçus à ce point (station, multiplex, niveaux indoor/outdoor en dBµV/m)
+
+Source des données : Arcom (ex-CSA) « Ma couverture TNT », via l'ANFR.
 
 ## Fonctionnalités
 
