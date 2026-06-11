@@ -126,6 +126,8 @@ tr:hover td{background:var(--bg2)}
     <input type="number" id="lon" value="4.8055"  step="0.0001" style="width:84px">
     <button class="btn btn-xs" id="geoBtn" title="Géolocaliser"><i class="ti ti-current-location"></i></button>
     <button class="btn btn-blue" id="scanBtn"><i class="ti ti-broadcast"></i> Analyser TNT</button>
+    <button class="btn" id="csvBtn" title="Importer le fichier « Télécharger au format CSV » de scanfrequences.anfr.fr"><i class="ti ti-file-upload"></i> CSV ANFR</button>
+    <input type="file" id="csvImp" accept=".csv,text/csv" style="display:none">
     <div class="sep"></div>
     <button class="btn btn-purple" id="autoBtn"><i class="ti ti-wand"></i> Plan auto</button>
     <button class="btn btn-xs" id="clearBtn" style="border-color:var(--red);color:var(--red)"><i class="ti ti-trash"></i> Tout effacer</button>
@@ -280,7 +282,7 @@ function chanFreqStart(ch){return 302+ch*8;}
 function normKey(k){return k.toLowerCase().replace(/[^a-z0-9]/g,'');}
 function pick(obj,names){for(const k of Object.keys(obj)){if(names.includes(normKey(k)))return obj[k];}return undefined;}
 const FIELDS={
-  ch:['canal','channel','ch','numcanal','numerocanal','num'],
+  ch:['canal','channel','ch','numcanal','numerocanal','num','ncanal','nocanal'],
   mux:['multiplex','mux','plex','nommultiplex'],
   station:['station','nomstation','emetteur','site','nom','libelle'],
   indoor:['indoor','interieur','int','niveauindoor'],
@@ -302,6 +304,10 @@ function extractChannels(payload){
     byCh.set(ch,{mux:muxV!=null&&muxV!==''?String(muxV):null,station:staV!=null&&staV!==''?String(staV):null,indoor:num(pick(item,FIELDS.indoor)),outdoor:num(pick(item,FIELDS.outdoor)),outdoor10m:num(pick(item,FIELDS.out10))});
   }
   if(byCh.size===0)return null;
+  return buildChannels(byCh);
+}
+
+function buildChannels(byCh){
   const channels=[];
   for(let ch=21;ch<=48;ch++){
     const d=byCh.get(ch),freqStart=chanFreqStart(ch);
@@ -309,6 +315,49 @@ function extractChannels(payload){
   }
   return channels;
 }
+
+// ── Import du CSV officiel (bouton « Télécharger au format CSV » du site
+//    scanfrequences.anfr.fr) ────────────────────────────────────────────
+function parseAnfrCsv(text){
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2)return null;
+  const delim=(lines[0].match(/;/g)||[]).length>=(lines[0].match(/,/g)||[]).length?';':',';
+  const split=l=>l.split(delim).map(c=>c.replace(/^"|"$/g,'').trim());
+  // cherche la ligne d'en-tête (contient une colonne « canal »)
+  let hIdx=-1,cols={};
+  for(let i=0;i<Math.min(lines.length,6);i++){
+    const map={};split(lines[i]).forEach((c,j)=>{map[normKey(c)]=j;});
+    if(FIELDS.ch.some(n=>map[n]!=null)){hIdx=i;cols=map;break;}
+  }
+  if(hIdx<0)return null;
+  const colOf=names=>{for(const n of names){if(cols[n]!=null)return cols[n];}return -1;};
+  const iCh=colOf(FIELDS.ch),iMux=colOf(FIELDS.mux),iSta=colOf(FIELDS.station),
+        iIn=colOf(FIELDS.indoor),iOut=colOf(FIELDS.outdoor),iO10=colOf(FIELDS.out10);
+  const num=v=>{if(v==null||v==='')return null;const n=parseFloat(String(v).replace(',','.'));return isNaN(n)?null:n;};
+  const byCh=new Map();
+  for(let i=hIdx+1;i<lines.length;i++){
+    const c=split(lines[i]);
+    const ch=parseInt(c[iCh]);
+    if(isNaN(ch)||ch<21||ch>60)continue;
+    byCh.set(ch,{mux:iMux>=0&&c[iMux]?c[iMux]:null,station:iSta>=0&&c[iSta]?c[iSta]:null,indoor:iIn>=0?num(c[iIn]):null,outdoor:iOut>=0?num(c[iOut]):null,outdoor10m:iO10>=0?num(c[iO10]):null});
+  }
+  if(byCh.size===0)return null;
+  return buildChannels(byCh);
+}
+
+document.getElementById('csvBtn').onclick=()=>document.getElementById('csvImp').click();
+document.getElementById('csvImp').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{
+    const channels=parseAnfrCsv(await f.text());
+    if(!channels)throw new Error('colonnes non reconnues dans ce fichier');
+    S.ch=channels;
+    const occ=S.ch.filter(c=>c.occupied).length;
+    setSt(`✓ CSV ANFR importé (${f.name}) — ${occ} canaux occupés, ${S.ch.length-occ} libres`);
+    computeIM();renderAll();
+  }catch(err){setSt('Erreur import CSV: '+err.message);}
+  finally{e.target.value='';}
+};
 
 // Relais dédié (Deno Deploy). Renseigner l'URL de ton service ici, ex. :
 //   const RELAY='https://easyrf-xxxx.deno.dev';
@@ -423,7 +472,7 @@ document.getElementById('scanBtn').onclick=async()=>{
     const occ=S.ch.filter(c=>c.occupied).length;
     setSt(`✓ ${data.source_label||data.source||'Données chargées'} — ${occ} canaux occupés, ${S.ch.length-occ} libres`);
     computeIM(); renderAll();
-  }catch(e){setSt('Erreur: '+e.message);}
+  }catch(e){setSt('Erreur: '+e.message+' — solution fiable : bouton « CSV ANFR » avec le fichier de scanfrequences.anfr.fr');}
   finally{document.getElementById('scanBtn').disabled=false;}
 };
 
