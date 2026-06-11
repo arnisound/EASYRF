@@ -310,30 +310,43 @@ function extractChannels(payload){
   return channels;
 }
 
-// Récupère une URL en JSON ; en cas de blocage CORS (TypeError « Failed to
-// fetch »), réessaie via un relais public qui ajoute les en-têtes CORS.
-async function fetchJSONviaProxy(url,opts,label){
+// Relais CORS publics, essayés dans l'ordre (le navigateur ne peut pas
+// appeler l'ANFR directement depuis un autre domaine).
+const PROXIES=[
+  u=>'https://corsproxy.io/?url='+encodeURIComponent(u),
+  u=>'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u),
+  u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u),
+];
+
+// Récupère une URL en JSON : essai direct, puis chaque relais en cascade.
+async function fetchJSONsmart(url,label,timeoutMs){
+  // 1) appel direct (réussit si la source autorise le CORS, ex. api-adresse)
   try{
-    const r=await fetch(url,opts);
-    if(!r.ok) throw new Error(label+' HTTP '+r.status);
-    return await r.json();
+    const r=await fetch(url,{signal:AbortSignal.timeout(timeoutMs)});
+    if(r.ok) return await r.json();
+    throw new Error(label+' HTTP '+r.status);
   }catch(e){
-    if(e instanceof Error && e.message.includes('HTTP')) throw e; // vraie erreur HTTP
-    // probable blocage CORS → relais public
-    const prox='https://api.allorigins.win/raw?url='+encodeURIComponent(url);
-    const r2=await fetch(prox,{signal:AbortSignal.timeout(15000)});
-    if(!r2.ok) throw new Error(label+' (relais) HTTP '+r2.status);
-    return await r2.json();
+    if(e&&e.message&&e.message.includes('HTTP')) throw e; // vraie réponse d'erreur
   }
+  // 2) relais successifs en cas de blocage CORS / timeout
+  let last;
+  for(const mk of PROXIES){
+    try{
+      const r=await fetch(mk(url),{signal:AbortSignal.timeout(timeoutMs)});
+      if(r.ok) return await r.json();
+      last=new Error(label+' (relais) HTTP '+r.status);
+    }catch(e){ last=new Error(label+' (relais) '+(e&&e.message||'échec')); }
+  }
+  throw last||new Error(label+' inaccessible');
 }
 
 async function getTNTDirect(lat,lon){
   // 1) géocodage inverse → code INSEE
-  const geo=await fetchJSONviaProxy(`https://api-adresse.data.gouv.fr/reverse/?lon=${lon}&lat=${lat}`,{signal:AbortSignal.timeout(8000)},'géocodage');
+  const geo=await fetchJSONsmart(`https://api-adresse.data.gouv.fr/reverse/?lon=${lon}&lat=${lat}`,'géocodage',10000);
   const props=geo.features&&geo.features[0]&&geo.features[0].properties;
   if(!props||!props.citycode) throw new Error('aucune commune (point en mer ou hors France ?)');
   // 2) couverture TNT
-  const payload=await fetchJSONviaProxy(`https://scanfrequences.anfr.fr/api/data?lat=${lat}&lng=${lon}&insee=${props.citycode}`,{signal:AbortSignal.timeout(12000)},'ANFR');
+  const payload=await fetchJSONsmart(`https://scanfrequences.anfr.fr/api/data?lat=${lat}&lng=${lon}&insee=${props.citycode}`,'ANFR',12000);
   const channels=extractChannels(payload);
   if(!channels) throw new Error('réponse ANFR reçue mais structure non reconnue');
   const city=props.city||props.label||null;
