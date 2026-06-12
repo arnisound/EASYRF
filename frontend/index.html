@@ -311,7 +311,7 @@ function buildChannels(byCh){
   const channels=[];
   for(let ch=21;ch<=48;ch++){
     const d=byCh.get(ch),freqStart=chanFreqStart(ch);
-    channels.push({ch,freq_start:freqStart,freq_end:freqStart+8,occupied:!!d,mux:d?d.mux:null,mux_content:d&&d.content?d.content:null,station:d?d.station:null,indoor_dbuvm:d?d.indoor:null,outdoor_dbuvm:d?d.outdoor:null,outdoor10m_dbuvm:d?d.outdoor10m:null,level_dbm:d&&d.outdoor!=null?parseFloat((d.outdoor-109.5).toFixed(1)):null});
+    channels.push({ch,freq_start:freqStart,freq_end:freqStart+8,occupied:!!d,mux:d?d.mux:null,mux_content:d&&d.content?d.content:null,station:d?d.station:null,sta_lat:d&&d.sta_lat!=null?d.sta_lat:null,sta_lng:d&&d.sta_lng!=null?d.sta_lng:null,indoor_dbuvm:d?d.indoor:null,outdoor_dbuvm:d?d.outdoor:null,outdoor10m_dbuvm:d?d.outdoor10m:null,level_dbm:d&&d.outdoor!=null?parseFloat((d.outdoor-109.5).toFixed(1)):null});
   }
   return channels;
 }
@@ -351,6 +351,9 @@ function extractArcom(payload){
   for(const em of emetteurs){
     if(!em||typeof em!=='object')continue;
     const staName=[em.site_station,em.lieu_station].filter(Boolean).join(' / ')||null;
+    // coordonnées décimales de l'émetteur (présentes au niveau de l'entrée)
+    let sLat=parseFloat(em.lat_station),sLng=parseFloat(em.lng_station);
+    if(!isFinite(sLat)||!isFinite(sLng)||Math.abs(sLat)>90||Math.abs(sLng)>180){sLat=null;sLng=null;}
     for(const [k,v] of Object.entries(em)){
       if(!/^R/.test(k)||!v||typeof v!=='object')continue; // R1…R15, RLocal…
       const found=[];harvest(v,found);
@@ -358,7 +361,7 @@ function extractArcom(payload){
         const cur=byCh.get(f.ch);
         // garde l'émetteur au niveau le plus fort si le canal est vu 2 fois
         if(!cur||(f.outdoor!=null&&(cur.outdoor==null||f.outdoor>cur.outdoor)))
-          byCh.set(f.ch,{mux:k,station:staName,content:contentOf[k]||null,indoor:f.indoor,outdoor:f.outdoor,outdoor10m:null});
+          byCh.set(f.ch,{mux:k,station:staName,content:contentOf[k]||null,indoor:f.indoor,outdoor:f.outdoor,outdoor10m:null,sta_lat:sLat,sta_lng:sLng});
       }
     }
   }
@@ -694,6 +697,24 @@ function renderAll(){
   document.getElementById('li5').style.display=S.show5?'flex':'none';
 }
 
+// Cellule « Émetteur » d'un canal TV : nom / lieu (distance) · mux
+function emitterCell(c){
+  if(!c.station&&!c.mux)return '—';
+  let txt=c.station||c.mux;
+  if(c.station&&c.sta_lat!=null&&c.sta_lng!=null&&S.lat!=null&&S.lon!=null){
+    const d=distKm(S.lat,S.lon,c.sta_lat,c.sta_lng);
+    txt+=` (${d<10?d.toFixed(1):Math.round(d)} km)`;
+  }
+  return txt+(c.station&&c.mux?` <span style="font-size:10px;color:var(--text2)">${c.mux}</span>`:'');
+}
+
+// Distance grand-cercle (km) entre deux points GPS
+function distKm(la1,lo1,la2,lo2){
+  const r=Math.PI/180,dLa=(la2-la1)*r,dLo=(lo2-lo1)*r;
+  const a=Math.sin(dLa/2)**2+Math.cos(la1*r)*Math.cos(la2*r)*Math.sin(dLo/2)**2;
+  return 2*6371*Math.asin(Math.sqrt(a));
+}
+
 function renderTable(){
   const w=document.getElementById('tblWrap');
   if(!S.ch.length&&!S.mics.length){
@@ -714,7 +735,7 @@ function renderTable(){
 
   let h=`<table><thead><tr>
     <th>Type</th><th>Canal / ID</th><th>Fréq. début</th><th>Porteuse / Fréq. fin</th>
-    <th>Multiplex / Modèle</th><th>Niveau</th><th>Statut</th><th style="width:28px"></th>
+    <th>Émetteur / Modèle</th><th>Niveau</th><th>Statut</th><th style="width:28px"></th>
   </tr></thead><tbody>`;
 
   items.forEach(it=>{
@@ -725,7 +746,7 @@ function renderTable(){
         <td style="color:var(--text2)">Canal ${c.ch}</td>
         <td style="font-family:monospace">${c.freq_start} MHz</td>
         <td style="font-family:monospace">${c.freq_end} MHz</td>
-        <td>${c.mux||'—'}${c.mux_content?` <span style="font-size:10px;color:var(--text2)">${c.mux_content}</span>`:''}</td>
+        <td>${emitterCell(c)}</td>
         <td style="font-family:monospace;font-size:11px;color:var(--text2)">${c.level_dbm!=null?c.level_dbm+' dBm':'—'}</td>
         <td><span class="badge ${c.occupied?'bTV':'bFree'}">${c.occupied?'Occupé':'Libre'}</span></td>
         <td></td></tr>`;
