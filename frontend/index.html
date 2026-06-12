@@ -209,6 +209,8 @@ tr:hover td{background:var(--bg2)}
       <strong>Plan fréquences automatique</strong>
       <span style="font-size:11px;color:var(--text2)">Les produits IM sont dirigés vers les canaux TV occupés.</span>
       <button class="btn btn-purple" id="genBtn"><i class="ti ti-wand"></i> Générer</button>
+      <button class="btn btn-purple" id="advBtn" title="Mode strict : aucune IM 3 sources (fA+fB−fC) tolérée sur les porteuses, et minimisation des IM5 à 3 sources. Plus exigeant : peut ne pas placer tous les micros sur les gros plans."><i class="ti ti-sparkles"></i> Génération avancée</button>
+      <button class="btn btn-xs" id="regenBtn" style="display:none" title="Propose un autre plan équivalent (tirage différent)"><i class="ti ti-refresh"></i> Régénérer</button>
       <button class="btn btn-xs btn-green" id="applyBtn" style="display:none"><i class="ti ti-check"></i> Appliquer aux micros</button>
     </div>
     <div id="planOut" style="color:var(--text2);font-size:12px">Analysez TNT + ajoutez vos modèles de micros, puis cliquez Générer.</div>
@@ -743,16 +745,24 @@ function micStatusBadge(m){
 }
 
 // ── PLAN AUTO ─────────────────────────────────────────────────────────
-document.getElementById('genBtn').onclick=generatePlan;
+document.getElementById('genBtn').onclick=()=>generatePlan({adv:false});
+document.getElementById('advBtn').onclick=()=>generatePlan({adv:true});
+document.getElementById('regenBtn').onclick=()=>generatePlan({adv:S.planAdv,shuffle:true});
 document.getElementById('applyBtn').onclick=applyPlan;
-document.getElementById('autoBtn').onclick=()=>{showTab('plan');generatePlan();};
+document.getElementById('autoBtn').onclick=()=>{showTab('plan');generatePlan({adv:false});};
 
 // Bandes légalement exploitables pour les micros HF en France (MHz) :
 // TNT 470–694 (selon canaux libres), PMSE 823–832, bande libre 863–865,
 // PMSE 1.8 GHz 1785–1805, systèmes 2.4 GHz. Le reste est interdit.
 const PLAN_BANDS=[[470,694],[822,838],[863,865],[1785,1805],[2400,2483.5]];
 
-function generatePlan(){
+// opts.adv     : mode avancé — aucune IM 3 sources (fA+fB−fC) tolérée sur une
+//                porteuse, et IM5 à 3 sources minimisées en plus.
+// opts.shuffle : régénération — un tirage aléatoire départage les candidats
+//                quasi équivalents pour proposer un plan différent.
+function generatePlan(opts){
+  const adv=!!(opts&&opts.adv), shuffle=!!(opts&&opts.shuffle);
+  S.planAdv=adv;
   const pr=document.getElementById('planOut');
   if(!S.ch.length){pr.innerHTML='<span style="color:var(--red)">Lancez d\'abord l\'analyse TNT.</span>';return;}
   if(!S.mics.length){pr.innerHTML='<span style="color:var(--red)">Ajoutez d\'abord des micros / IEM.</span>';return;}
@@ -765,20 +775,26 @@ function generatePlan(){
 
   const GUARD=0.15; // garde entre une IM et une porteuse (MHz)
 
-  // micros les plus contraints d'abord (plage étroite, spacing large)
+  // micros les plus contraints d'abord (plage étroite, spacing large) ;
+  // en régénération, l'ordre des ex æquo est tiré au hasard
+  const rk=S.mics.map(()=>Math.random());
   const order=S.mics.map((m,i)=>i).sort((x,y)=>{
     const wx=S.mics[x].fmax-S.mics[x].fmin, wy=S.mics[y].fmax-S.mics[y].fmin;
-    return wx!==wy?wx-wy:(S.mics[y].spacing||350)-(S.mics[x].spacing||350);
+    return (wx!==wy?wx-wy:(S.mics[y].spacing||350)-(S.mics[x].spacing||350))||(shuffle?rk[x]-rk[y]:0);
   });
 
-  const GUARD3=0.1; // garde plus étroite pour les IM 3 tons (produits plus rares)
+  const GUARD3=0.1;   // garde plus étroite pour les IM 3 tons (produits plus rares)
+  const GUARD53=0.05; // IM5 à 3 sources : très faibles, fenêtre minimale
   const placed=new Array(S.mics.length).fill(null);
   const setF=[];            // porteuses posées {freq,sp}
   const imMask=maskNew();   // IM 2 tons du plan (± garde)
   const im3Mask=maskNew();  // IM 3 tons (fA+fB−fC) du plan (± garde étroite)
+  const im53Mask=maskNew(); // IM5 3 sources du plan (mode avancé)
   const carMask=maskNew();  // porteuses posées (± garde)
   const polluted=new Set(); // canaux libres « sacrifiés » (contiennent déjà des IM)
   const pairIM=(a,b)=>[2*a-b,2*b-a,3*a-2*b,3*b-2*a];
+  // les 9 produits IM5 à 3 sources d'un triplet (3x−a−b, 2x+a−2b, …)
+  const tri5=(x,a,b)=>[3*x-a-b,3*a-x-b,3*b-x-a,2*x+a-2*b,2*x+b-2*a,2*a+x-2*b,2*a+b-2*x,2*b+x-2*a,2*b+a-2*x];
 
   for(const idx of order){
     const m=S.mics[idx], sp=(m.spacing||350)/1000;
@@ -808,23 +824,42 @@ function generatePlan(){
       }
       if(!ok) continue;
       const minD=setF.length?Math.min(...setF.map(c=>Math.abs(f-c.freq))):5;
-      // une porteuse posée sur une IM 3 tons existante part avec un malus
-      cands.push({f,c3:maskHit(im3Mask,f)?1:0,score:score+Math.min(minD,1.5)});
+      // une porteuse posée sur une IM 3 tons existante part avec un malus ;
+      // en régénération un bruit aléatoire départage les quasi-équivalents
+      cands.push({f,c3:maskHit(im3Mask,f)?1:0,score:score+Math.min(minD,1.5)+(shuffle?Math.random()*2:0)});
     }
     // Phase 2 : parmi les meilleurs candidats (les indemnes d'IM 3 tons
     // d'abord), choisir celui qui n'est touché par aucune IM 3 tons et n'en
     // crée aucune sur une porteuse déjà posée.
     cands.sort((a,b)=>a.c3-b.c3||b.score-a.score);
-    let best=null,bestV=Infinity;
+    let best=null,bestV=Infinity,clean=0;
     for(const c of cands.slice(0,800)){
       let v=c.c3;
-      cnt: for(let i=0;i<setF.length&&v<bestV;i++)for(let j=i+1;j<setF.length;j++){
-        const a=setF[i].freq,b=setF[j].freq;
-        for(const im of [c.f+a-b,c.f+b-a,a+b-c.f])
-          if(maskHit(carMask,im)||Math.abs(im-c.f)<GUARD3){v++;if(v>=bestV)break cnt;}
+      if(adv){
+        // mode avancé : la moindre IM 3 sources disqualifie le candidat
+        cnt3: for(let i=0;i<setF.length&&v===0;i++)for(let j=i+1;j<setF.length;j++){
+          const a=setF[i].freq,b=setF[j].freq;
+          for(const im of [c.f+a-b,c.f+b-a,a+b-c.f])
+            if(maskHit(carMask,im)||Math.abs(im-c.f)<GUARD3){v++;break cnt3;}
+        }
+        if(v>0) continue;
+        // parmi les candidats propres, minimiser les IM5 à 3 sources
+        let v5=maskHit(im53Mask,c.f)?1:0;
+        cnt5: for(let i=0;i<setF.length&&v5<bestV;i++)for(let j=i+1;j<setF.length;j++){
+          for(const im of tri5(c.f,setF[i].freq,setF[j].freq))
+            if(maskHit(carMask,im)||Math.abs(im-c.f)<GUARD53){v5++;if(v5>=bestV)break cnt5;}
+        }
+        if(v5<bestV){bestV=v5;best=c.f;}
+        if(bestV===0||++clean>=25) break; // assez de candidats propres examinés
+      }else{
+        cnt: for(let i=0;i<setF.length&&v<bestV;i++)for(let j=i+1;j<setF.length;j++){
+          const a=setF[i].freq,b=setF[j].freq;
+          for(const im of [c.f+a-b,c.f+b-a,a+b-c.f])
+            if(maskHit(carMask,im)||Math.abs(im-c.f)<GUARD3){v++;if(v>=bestV)break cnt;}
+        }
+        if(v<bestV){bestV=v;best=c.f;}
+        if(bestV===0) break; // candidat 100 % propre (et le mieux noté) trouvé
       }
-      if(v<bestV){bestV=v;best=c.f;}
-      if(bestV===0) break; // candidat 100 % propre (et le mieux noté) trouvé
     }
     if(best!=null){
       for(const c of setF) for(const im of pairIM(best,c.freq)){
@@ -836,6 +871,7 @@ function generatePlan(){
       for(let i=0;i<setF.length;i++)for(let j=i+1;j<setF.length;j++){
         const a=setF[i].freq,b=setF[j].freq;
         for(const im of [best+a-b,best+b-a,a+b-best]) maskMark(im3Mask,im,GUARD3);
+        if(adv) for(const im of tri5(best,a,b)) maskMark(im53Mask,im,GUARD53);
       }
       placed[idx]=best;setF.push({freq:best,sp});
       maskMark(carMask,best,GUARD);
@@ -860,14 +896,24 @@ function generatePlan(){
     if(maskHit(car3,freqs[i]+freqs[j]-freqs[k])) res3++;
   }
 
+  // IM5 à 3 sources résiduelles sur porteuse (mode avancé uniquement)
+  let res5=0;
+  if(adv){
+    const car5=maskNew(); freqs.forEach(f=>maskMark(car5,f,GUARD53));
+    for(let i=0;i<freqs.length;i++)for(let j=i+1;j<freqs.length;j++)for(let k=j+1;k<freqs.length;k++)
+      for(const im of tri5(freqs[i],freqs[j],freqs[k])) if(maskHit(car5,im)) res5++;
+  }
+
   const koNames=S.mics.filter((m,i)=>placed[i]==null).map(m=>m.name);
   let h=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+    <span class="badge bMic">${adv?'Mode avancé · 3 sources + IM5':'Mode standard'}</span>
     <span class="badge ${nKO?'bWarn':'bOK'}">${nOK}/${S.mics.length} fréquences placées</span>
     <span class="badge bTV">${imTV} IM en zone TV</span>
     ${imFree>0?`<span class="badge bWarn">${imFree} IM en zone libre${sacr.length?' (canaux sacrifiés : C'+sacr.join(', C')+')':''}</span>`:'<span class="badge bOK">0 IM en zone libre ✓</span>'}
     ${res3>0?`<span class="badge bWarn" title="Produits fA+fB−fC (3 émetteurs simultanés), plus faibles que les IM 2 tons">${res3} IM 3 tons sur porteuse</span>`:'<span class="badge bOK">0 IM sur les porteuses ✓</span>'}
+    ${adv?(res5>0?`<span class="badge bWarn" title="Produits du 5e ordre à 3 sources (3fA−fB−fC, 2fA+fB−2fC…), très faibles">${res5} IM5 3 sources résiduelles</span>`:'<span class="badge bOK">0 IM5 3 sources ✓</span>'):''}
   </div>`;
-  if(koNames.length) h+=`<div style="color:var(--red);font-size:11px;margin-bottom:8px">⚠ Non placés (plage saturée) : ${koNames.join(', ')}</div>`;
+  if(koNames.length) h+=`<div style="color:var(--red);font-size:11px;margin-bottom:8px">⚠ Non placés (${adv?'contrainte 3 sources stricte — réessayez en génération standard':'plage saturée'}) : ${koNames.join(', ')}</div>`;
   h+='<div class="plan-grid">';
 
   S.ch.forEach(ch=>{
@@ -891,6 +937,7 @@ function generatePlan(){
   if(offGrid.length) h+=`<div style="margin-top:10px;font-size:11px;color:var(--text2)">Hors bande TNT : ${offGrid.map(x=>`${x.m.name} <b>${x.f.toFixed(3)}</b>`).join(' · ')}</div>`;
   pr.innerHTML=h;
   document.getElementById('applyBtn').style.display='inline-flex';
+  document.getElementById('regenBtn').style.display='inline-flex';
 }
 
 function applyPlan(){
