@@ -307,12 +307,18 @@ function extractChannels(payload){
   return buildChannels(byCh);
 }
 
+// Canaux supplémentaires réservés aux micros HF (PMSE) en France, hors TNT :
+// canaux 65 et 66 ≈ 822–838 MHz (sous-bande harmonisée 823–832 MHz).
+const PMSE_CH=[65,66];
+
 function buildChannels(byCh){
   const channels=[];
-  for(let ch=21;ch<=48;ch++){
+  const add=(ch,pmse)=>{
     const d=byCh.get(ch),freqStart=chanFreqStart(ch);
-    channels.push({ch,freq_start:freqStart,freq_end:freqStart+8,occupied:!!d,mux:d?d.mux:null,mux_content:d&&d.content?d.content:null,station:d?d.station:null,sta_lat:d&&d.sta_lat!=null?d.sta_lat:null,sta_lng:d&&d.sta_lng!=null?d.sta_lng:null,indoor_dbuvm:d?d.indoor:null,outdoor_dbuvm:d?d.outdoor:null,outdoor10m_dbuvm:d?d.outdoor10m:null,level_dbm:d&&d.outdoor!=null?parseFloat((d.outdoor-109.5).toFixed(1)):null});
-  }
+    channels.push({ch,freq_start:freqStart,freq_end:freqStart+8,occupied:!!d,pmse:!!pmse,mux:d?d.mux:null,mux_content:d&&d.content?d.content:null,station:d?d.station:null,sta_lat:d&&d.sta_lat!=null?d.sta_lat:null,sta_lng:d&&d.sta_lng!=null?d.sta_lng:null,indoor_dbuvm:d?d.indoor:null,outdoor_dbuvm:d?d.outdoor:null,outdoor10m_dbuvm:d?d.outdoor10m:null,level_dbm:d&&d.outdoor!=null?parseFloat((d.outdoor-109.5).toFixed(1)):null});
+  };
+  for(let ch=21;ch<=48;ch++) add(ch,false);
+  PMSE_CH.forEach(ch=>add(ch,true)); // toujours libres (pas de TNT dans cette bande)
   return channels;
 }
 
@@ -699,6 +705,7 @@ function renderAll(){
 
 // Cellule « Émetteur » d'un canal TV : nom / lieu (distance) · mux
 function emitterCell(c){
+  if(c.pmse)return '<span style="color:var(--text2)">Bande micros HF (PMSE)</span>';
   if(!c.station&&!c.mux)return '—';
   let txt=c.station||c.mux;
   if(c.station&&c.sta_lat!=null&&c.sta_lng!=null&&S.lat!=null&&S.lon!=null){
@@ -720,7 +727,7 @@ function renderTable(){
   if(!S.ch.length&&!S.mics.length){
     w.innerHTML='<div class="empty"><i class="ti ti-broadcast"></i>Lancez l\'analyse TNT pour charger les canaux.</div>';return;
   }
-  const FMIN=470,FMAX=698;
+  const FMIN=470,FMAX=840; // inclut les canaux PMSE 65/66 (~822–838 MHz)
   const items=[];
   S.ch.forEach(c=>{if(c.freq_end<=FMAX) items.push({f:c.freq_start,t:'tv',d:c});});
   S.mics.forEach((m,i)=>items.push({f:m.freq,t:'mic',d:m,i}));
