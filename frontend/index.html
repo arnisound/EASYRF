@@ -800,12 +800,34 @@ function drawSpec(){
   ctx.scale(D,D);
   const dark=matchMedia('(prefers-color-scheme:dark)').matches;
   ctx.clearRect(0,0,W,H);
-  const FMIN=470,FMAX=694,FR=FMAX-FMIN,BH=H-22;
-  const fx=f=>(f-FMIN)/FR*W;
+  // Échelle en deux segments : bande TNT 470–694, puis canaux PMSE 822–838,
+  // séparés par une zone compressée (694–822 : réservé 3G/4G).
+  const T1=470,T2=694,P1=822,P2=838,GAPW=34,BH=H-22;
+  const FMIN=T1,FMAX=P2;
+  const pxMHz=(W-GAPW)/((T2-T1)+(P2-P1));
+  const fx=f=> f<=T2 ? (f-T1)*pxMHz
+            : f<P1 ? (T2-T1)*pxMHz+GAPW*(f-T2)/(P1-T2)
+            : (T2-T1)*pxMHz+GAPW+(f-P1)*pxMHz;
+
+  // zone 694–822 MHz réservée à la téléphonie mobile
+  const gx1=fx(T2),gx2=fx(P1);
+  ctx.fillStyle=dark?'rgba(255,255,255,.04)':'rgba(0,0,0,.04)';
+  ctx.fillRect(gx1,0,gx2-gx1,BH);
+  ctx.strokeStyle=dark?'rgba(255,255,255,.15)':'rgba(0,0,0,.15)';
+  ctx.lineWidth=.5;ctx.setLineDash([3,3]);
+  ctx.beginPath();ctx.moveTo(gx1+.5,0);ctx.lineTo(gx1+.5,BH);
+  ctx.moveTo(gx2-.5,0);ctx.lineTo(gx2-.5,BH);ctx.stroke();ctx.setLineDash([]);
+  ctx.save();
+  ctx.translate((gx1+gx2)/2,BH/2);ctx.rotate(-Math.PI/2);
+  ctx.fillStyle=dark?'rgba(255,255,255,.35)':'rgba(0,0,0,.35)';
+  ctx.font='9px sans-serif';ctx.textAlign='center';
+  ctx.fillText('réservé 3G / 4G',0,3);
+  ctx.restore();
 
   ctx.strokeStyle=dark?'rgba(255,255,255,.05)':'rgba(0,0,0,.05)';
   ctx.lineWidth=.5;
-  for(let f=478;f<FMAX;f+=8){ctx.beginPath();ctx.moveTo(fx(f),0);ctx.lineTo(fx(f),BH);ctx.stroke();}
+  for(let f=478;f<T2;f+=8){ctx.beginPath();ctx.moveTo(fx(f),0);ctx.lineTo(fx(f),BH);ctx.stroke();}
+  ctx.beginPath();ctx.moveTo(fx(830),0);ctx.lineTo(fx(830),BH);ctx.stroke();
 
   S.ch.forEach(c=>{
     if(c.freq_end<=FMIN||c.freq_start>=FMAX) return;
@@ -845,6 +867,7 @@ function drawSpec(){
   ctx.fillStyle=dark?'rgba(255,255,255,.4)':'rgba(0,0,0,.4)';
   ctx.font='9px sans-serif';ctx.textAlign='center';
   for(let f=480;f<=690;f+=10) ctx.fillText(f,fx(f),H-5);
+  [826,834].forEach(f=>ctx.fillText(f,fx(f),H-5)); // centres des canaux 65/66
   ctx.textAlign='left';ctx.fillText('MHz',2,H-5);
 }
 
