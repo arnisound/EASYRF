@@ -177,6 +177,7 @@ tr:hover td{background:var(--bg2)}
   <div class="tab on" data-t="table"><i class="ti ti-table"></i> Tableau</div>
   <div class="tab" data-t="spectrum"><i class="ti ti-wave-sine"></i> Spectre</div>
   <div class="tab" data-t="plan"><i class="ti ti-wand"></i> Plan auto</div>
+  <div class="tab" data-t="fplan"><i class="ti ti-edit"></i> Plan fréquences</div>
 </div>
 
 <!-- TABLE -->
@@ -206,11 +207,24 @@ tr:hover td{background:var(--bg2)}
   <div class="plan-pad">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       <strong>Plan fréquences automatique</strong>
-      <span style="font-size:11px;color:var(--text2)">Les produits IM tombent dans les canaux TV occupés ("poubelle").</span>
+      <span style="font-size:11px;color:var(--text2)">Les produits IM sont dirigés vers les canaux TV occupés.</span>
       <button class="btn btn-purple" id="genBtn"><i class="ti ti-wand"></i> Générer</button>
       <button class="btn btn-xs btn-green" id="applyBtn" style="display:none"><i class="ti ti-check"></i> Appliquer aux micros</button>
     </div>
     <div id="planOut" style="color:var(--text2);font-size:12px">Analysez TNT + ajoutez vos modèles de micros, puis cliquez Générer.</div>
+  </div>
+</div>
+
+<!-- PLAN FREQUENCES (éditable) -->
+<div class="pane" id="pane-fplan">
+  <div class="plan-pad">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <strong>Plan de fréquences</strong>
+      <span style="font-size:11px;color:var(--text2)">Éditez noms et fréquences ; les statuts TNT / IM se recalculent aussitôt.</span>
+      <button class="btn btn-xs" id="fpAdd"><i class="ti ti-plus"></i> Ajouter une ligne</button>
+      <button class="btn btn-xs" id="fpCsv" style="margin-left:auto"><i class="ti ti-download"></i> Exporter CSV</button>
+    </div>
+    <div class="tbl-sc" id="fplanWrap"></div>
   </div>
 </div>
 
@@ -763,7 +777,7 @@ function generatePlan(){
   const koNames=S.mics.filter((m,i)=>placed[i]==null).map(m=>m.name);
   let h=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
     <span class="badge ${nKO?'bWarn':'bOK'}">${nOK}/${S.mics.length} fréquences placées</span>
-    <span class="badge bTV">${imPoubelle} IM → poubelle TV</span>
+    <span class="badge bTV">${imPoubelle} IM en zone TV</span>
     ${imFree>0?`<span class="badge bErr">${imFree} IM en zone libre</span>`:'<span class="badge bOK">0 IM en zone libre ✓</span>'}
   </div>`;
   if(koNames.length) h+=`<div style="color:var(--red);font-size:11px;margin-bottom:8px">⚠ Non placés (plage saturée) : ${koNames.join(', ')}</div>`;
@@ -801,7 +815,7 @@ function applyPlan(){
 
 // ── RENDER ────────────────────────────────────────────────────────────
 function renderAll(){
-  renderTable(); drawSpec();
+  renderTable(); drawSpec(); renderFreqPlan();
   const occ=S.ch.filter(c=>c.occupied).length;
   document.getElementById('sts').textContent=S.ch.length?`${occ} occ · ${S.ch.length-occ} libres · ${S.mics.length} micros · ${S.mics.filter(m=>m.imHits&&m.imHits.length).length} conflits IM`:'';
   document.getElementById('li3').style.display=S.show3?'flex':'none';
@@ -869,7 +883,7 @@ function renderTable(){
       h+=`<tr class="r-mic">
         <td><span class="dot" style="background:${m.color}"></span><span class="badge bMic">${m.kind==="iem"?"IEM":"Micro"}</span></td>
         <td style="font-weight:600">${m.name}</td>
-        <td style="font-family:monospace;color:var(--text2)">${m.fmin} MHz</td>
+        <td></td>
         <td style="font-family:monospace;font-weight:600;color:${m.color}">${m.freq} MHz</td>
         <td style="color:var(--text2);font-size:11px">${m.brand?m.brand+' ':''}${m.model||''}${m.band?' '+m.band:''}<br><span style="opacity:.7">${m.fmin}–${m.fmax} MHz · espacement ${m.spacing||m.bw} kHz</span></td>
         <td style="font-size:11px;color:var(--text2)">±${(m.bw/2).toFixed(0)} kHz</td>
@@ -1065,13 +1079,67 @@ document.getElementById('ck3').onchange=e=>{S.show3=e.target.checked;renderAll()
 document.getElementById('ck5').onchange=e=>{S.show5=e.target.checked;renderAll();};
 document.getElementById('ckB').onchange=e=>{S.onlyB=e.target.checked;renderAll();};
 
-document.getElementById('csvBtn').onclick=()=>{
-  const rows=['Nom,Fréquence (MHz),Plage min,Plage max,BW (kHz),Conflit TNT,Conflits IM'];
-  S.mics.forEach(m=>rows.push(`${m.name},${m.freq},${m.fmin},${m.fmax},${m.bw},${m.tntConflict?'OUI':'non'},${m.imHits?m.imHits.length:0}`));
+// ── PLAN FRÉQUENCES ÉDITABLE ─────────────────────────────────────────
+function renderFreqPlan(){
+  const w=document.getElementById('fplanWrap');
+  if(!w)return;
+  if(!S.mics.length){
+    w.innerHTML='<div class="empty"><i class="ti ti-edit"></i>Ajoutez des micros / IEM (ou une ligne libre) pour construire le plan.</div>';
+    return;
+  }
+  let h=`<table><thead><tr>
+    <th>#</th><th>Nom</th><th>Matériel</th><th>Fréquence (MHz)</th><th>Plage</th><th>Statut</th><th style="width:28px"></th>
+  </tr></thead><tbody>`;
+  S.mics.forEach((m,i)=>{
+    const imH=m.imHits?m.imHits.length:0;
+    const st=m.tntConflict?'<span class="badge bErr">⚠ TNT</span>':(imH?`<span class="badge bWarn">IM×${imH}</span>`:'<span class="badge bOK">OK</span>');
+    h+=`<tr>
+      <td><span class="dot" style="background:${m.color}"></span>${i+1}</td>
+      <td><input type="text" value="${(m.name||'').replace(/"/g,'&quot;')}" data-fp="name" data-i="${i}" style="width:150px"></td>
+      <td style="font-size:11px;color:var(--text2)">${m.brand?m.brand+' ':''}${m.model||'—'}${m.band?' '+m.band:''}</td>
+      <td><input type="number" value="${m.freq}" step="0.025" data-fp="freq" data-i="${i}" style="width:100px;font-family:monospace"></td>
+      <td style="font-size:11px;color:var(--text2)">${m.fmin}–${m.fmax}</td>
+      <td>${st}</td>
+      <td><button class="btn btn-xs" onclick="rmMic(${m.id})" title="Supprimer"><i class="ti ti-x"></i></button></td>
+    </tr>`;
+  });
+  h+='</tbody></table>';
+  w.innerHTML=h;
+  w.querySelectorAll('input[data-fp]').forEach(inp=>{
+    inp.onchange=()=>{
+      const i=parseInt(inp.dataset.i),m=S.mics[i];
+      if(!m)return;
+      if(inp.dataset.fp==='name'){ m.name=inp.value.trim()||m.name; }
+      else{
+        const f=parseFloat(inp.value);
+        if(isNaN(f))return;
+        m.freq=parseFloat(f.toFixed(3));
+        m.tntConflict=S.ch.some(c=>c.occupied&&m.freq>=c.freq_start&&m.freq<c.freq_end);
+      }
+      computeIM(); renderAll();
+    };
+  });
+}
+
+// ligne libre : fréquence manuelle, sans modèle imposé
+document.getElementById('fpAdd').onclick=()=>{
+  const freq=autoAssign(470,694,350)||470.3;
+  S.mics.push({id:Date.now(),name:'Ligne '+(S.mics.length+1),brand:'',model:'Libre',band:'',kind:'mic',
+    freq,fmin:470,fmax:694,bw:200,spacing:350,
+    tntConflict:S.ch.some(c=>c.occupied&&freq>=c.freq_start&&freq<c.freq_end),
+    color:MC[S.mics.length%MC.length],imHits:[]});
+  computeIM(); renderAll();
+};
+
+function exportPlanCsv(){
+  const rows=['Nom,Marque,Modèle,Gamme,Fréquence (MHz),Plage min,Plage max,Espacement (kHz),Conflit TNT,Conflits IM'];
+  S.mics.forEach(m=>rows.push(`"${(m.name||'').replace(/"/g,'""')}",${m.brand||''},${m.model||''},${m.band||''},${m.freq},${m.fmin},${m.fmax},${m.spacing||m.bw},${m.tntConflict?'OUI':'non'},${m.imHits?m.imHits.length:0}`));
   const b=new Blob([rows.join('\n')],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a');a.href=URL.createObjectURL(b);
   a.download='easyrf_plan_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
-};
+}
+document.getElementById('csvBtn').onclick=exportPlanCsv;
+document.getElementById('fpCsv').onclick=exportPlanCsv;
 
 function setSt(t){document.getElementById('st').textContent=t;}
 window.addEventListener('resize',()=>drawSpec());
