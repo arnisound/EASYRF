@@ -140,80 +140,12 @@ tr:hover td{background:var(--bg2)}
 
   <div class="trow add-bar">
     <span class="lbl" style="font-weight:600">+ Micro</span>
-    <select id="selMod" onchange="applyPreset()" style="max-width:220px">
-      <option value="">— Modèle —</option>
-      <optgroup label="Shure">
-        <option value="Shure QLXD G50|614|694|200">Shure QLXD (G50) 614–694</option>
-        <option value="Shure QLXD J50|572|636|200">Shure QLXD (J50) 572–636</option>
-        <option value="Shure QLXD H50|534|598|200">Shure QLXD (H50) 534–598</option>
-        <option value="Shure ULXD H50|534|598|200">Shure ULXD (H50) 534–598</option>
-        <option value="Shure ULXD J50|572|636|200">Shure ULXD (J50) 572–636</option>
-        <option value="Shure Axient J53|566|636|200">Shure Axient Digital (J53) 566–636</option>
-        <option value="Shure Axient G50|614|694|200">Shure Axient (G50) 614–694</option>
-        <option value="Shure SLX-D H50|534|598|200">Shure SLX-D (H50) 534–598</option>
-        <option value="Shure SLX-D J53|566|636|200">Shure SLX-D (J53) 566–636</option>
-        <option value="Shure BLX24 H9|512|542|200">Shure BLX24 (H9) 512–542</option>
-        <option value="Shure BLX24 J11|596|616|200">Shure BLX24 (J11) 596–616</option>
-        <option value="Shure Microflex MX8|566|636|200">Shure Microflex MX8 (J53)</option>
-      </optgroup>
-      <optgroup label="Sennheiser">
-        <option value="Sennheiser EW100 G4 AW+|470|558|200">Sennheiser EW100 G4 (AW+) 470–558</option>
-        <option value="Sennheiser EW300 G4 AW+|470|558|200">Sennheiser EW300 G4 (AW+) 470–558</option>
-        <option value="Sennheiser EW300 G4 GW|558|626|200">Sennheiser EW300 G4 (GW) 558–626</option>
-        <option value="Sennheiser EW500 G4 AW+|470|558|200">Sennheiser EW500 G4 (AW+) 470–558</option>
-        <option value="Sennheiser EW500 G4 GW|558|626|200">Sennheiser EW500 G4 (GW) 558–626</option>
-        <option value="Sennheiser EW-DX AW3|520|607|200">Sennheiser EW-DX (AW3) 520–607</option>
-        <option value="Sennheiser EW-DX R1-9|606|694|200">Sennheiser EW-DX (R1-9) 606–694</option>
-        <option value="Sennheiser 2000 AW|470|558|200">Sennheiser 2000 Series (AW) 470–558</option>
-        <option value="Sennheiser 2000 BW|626|698|200">Sennheiser 2000 Series (BW) 626–698</option>
-        <option value="Sennheiser SK6000 AW+|470|558|200">Sennheiser SK6000 (AW+) 470–558</option>
-        <option value="Sennheiser SK6000 GW|558|626|200">Sennheiser SK6000 (GW) 558–626</option>
-        <option value="Sennheiser Digital 6000 A|470|538|200">Sennheiser Digital 6000 (A) 470–538</option>
-      </optgroup>
-      <optgroup label="Sony">
-        <option value="Sony DWX Series|470|606|200">Sony DWX Series 470–606</option>
-        <option value="Sony URX-P03D|566|638|200">Sony URX-P03D 566–638</option>
-        <option value="Sony DWM-02N|558|638|200">Sony DWM-02N 558–638</option>
-        <option value="Sony UWP-D21|534|608|200">Sony UWP-D21 534–608</option>
-        <option value="Sony UWP-D26|534|608|200">Sony UWP-D26 534–608</option>
-      </optgroup>
-      <optgroup label="Audio-Technica">
-        <option value="AT 3000 DE2|470|530|200">AT 3000 Series (DE2) 470–530</option>
-        <option value="AT 3000 EG2|560|596|200">AT 3000 Series (EG2) 560–596</option>
-        <option value="AT 5000 EF|560|596|200">AT 5000 Series (EF) 560–596</option>
-        <option value="AT System10 Pro|2400|2483|1000">AT System10 Pro 2.4 GHz</option>
-      </optgroup>
-      <optgroup label="Wisycom">
-        <option value="Wisycom MTP40S|470|694|200">Wisycom MTP40S 470–694</option>
-        <option value="Wisycom MTP41S|470|694|200">Wisycom MTP41S 470–694</option>
-        <option value="Wisycom MCR42S|470|694|200">Wisycom MCR42S 470–694</option>
-        <option value="Wisycom MCR42|470|694|200">Wisycom MCR42 470–694</option>
-        <option value="Wisycom MPR30|470|694|200">Wisycom MPR30 470–694</option>
-      </optgroup>
-      <optgroup label="Lectrosonics">
-        <option value="Lectrosonics SMDa A1|470|614|200">Lectrosonics SMDa (A1) 470–614</option>
-        <option value="Lectrosonics SMDa B1|614|691|200">Lectrosonics SMDa (B1) 614–691</option>
-        <option value="Lectrosonics DCR822 A1|470|614|200">Lectrosonics DCR822 (A1)</option>
-        <option value="Lectrosonics M2T A1|470|614|200">Lectrosonics M2T (A1)</option>
-      </optgroup>
-      <optgroup label="Røde / DJI">
-        <option value="Røde Wireless Go II|2400|2483|1000">Røde Wireless Go II (2.4 GHz)</option>
-        <option value="Røde Wireless ME|2400|2483|1000">Røde Wireless ME (2.4 GHz)</option>
-        <option value="DJI Mic 2|2400|2483|2000">DJI Mic 2 (2.4 GHz)</option>
-      </optgroup>
-      <optgroup label="Retours IEM">
-        <option value="Shure PSM300 H20|518|578|200">Shure PSM300 (H20) IEM 518–578</option>
-        <option value="Shure PSM900 G7|470|530|200">Shure PSM900 (G7) IEM 470–530</option>
-        <option value="Sennheiser EW300 IEM AW|516|558|200">Sennheiser EW300 IEM (AW)</option>
-        <option value="Sennheiser EW300 IEM GW|626|668|200">Sennheiser EW300 IEM (GW)</option>
-        <option value="Lectrosonics R1a A1|470|614|200">Lectrosonics R1a IEM (A1)</option>
-      </optgroup>
-    </select>
-    <input type="text"   id="micName" placeholder="Nom / rôle" style="width:110px">
-    <input type="number" id="micFreq" placeholder="MHz (auto)" style="width:80px" step="0.025">
-    <span id="hint" style="font-size:11px;color:var(--text2)"></span>
+    <select id="selBrand" style="max-width:150px"><option value="">— Marque —</option></select>
+    <select id="selModel" style="max-width:180px" disabled><option value="">— Modèle —</option></select>
+    <select id="selBand" style="max-width:190px" disabled><option value="">— Gamme —</option></select>
+    <input type="number" id="micCount" min="1" max="32" value="1" title="Nombre de micros" style="width:60px">
     <button class="btn btn-green" id="addBtn"><i class="ti ti-plus"></i> Ajouter</button>
-    <button class="btn btn-xs" id="addNBtn" title="Ajouter N exemplaires"><i class="ti ti-copy"></i> ×N</button>
+    <span id="hint" style="font-size:11px;color:var(--text2)"></span>
     <span id="addErr" style="font-size:11px;color:var(--red);display:none"></span>
   </div>
 </div>
@@ -525,44 +457,115 @@ document.getElementById('scanBtn').onclick=async()=>{
   finally{document.getElementById('scanBtn').disabled=false;}
 };
 
-// ── PRESET ───────────────────────────────────────────────────────────
-function applyPreset(){
-  const v=document.getElementById('selMod').value;
-  if(!v){S._fmin=470;S._fmax=694;S._bw=200;document.getElementById('hint').textContent='';return;}
-  const p=v.split('|');
-  S._fmin=parseFloat(p[1]); S._fmax=parseFloat(p[2]); S._bw=parseFloat(p[3])||200;
-  document.getElementById('hint').textContent=`${p[1]}–${p[2]} MHz`;
-  document.getElementById('micName').value=p[0];
-  document.getElementById('micFreq').value='';
-}
-
-// ── ADD MIC ───────────────────────────────────────────────────────────
-document.getElementById('addBtn').onclick=()=>addMic(1);
-document.getElementById('addNBtn').onclick=()=>{
-  const n=parseInt(prompt('Combien de micros de ce modèle ?','4'));
-  if(n>0&&n<=32) addMic(n);
+// ── CATALOGUE MICROS — marque → modèle → gammes [label, fmin, fmax, bw?] ─
+const MIC_CATALOG={
+  "Shure":{
+    "QLX-D":[["G50",614,694],["J50",572,636],["H50",534,598]],
+    "ULX-D":[["H50",534,598],["J50",572,636]],
+    "Axient Digital":[["J53",566,636],["G50",614,694]],
+    "SLX-D":[["H50",534,598],["J53",566,636]],
+    "BLX24":[["H9",512,542],["J11",596,616]],
+    "Microflex MX8":[["J53",566,636]],
+    "PSM300 (IEM)":[["H20",518,578]],
+    "PSM900 (IEM)":[["G7",470,530]]
+  },
+  "Sennheiser":{
+    "EW100 G4":[["AW+",470,558]],
+    "EW300 G4":[["AW+",470,558],["GW",558,626]],
+    "EW500 G4":[["AW+",470,558],["GW",558,626]],
+    "EW-DX":[["AW3",520,607],["R1-9",606,694]],
+    "2000 Series":[["AW",470,558],["BW",626,698]],
+    "SK6000":[["AW+",470,558],["GW",558,626]],
+    "Digital 6000":[["A",470,538]],
+    "EW300 IEM":[["AW",516,558],["GW",626,668]]
+  },
+  "Sony":{
+    "DWX Series":[["",470,606]],
+    "URX-P03D":[["",566,638]],
+    "DWM-02N":[["",558,638]],
+    "UWP-D21":[["",534,608]],
+    "UWP-D26":[["",534,608]]
+  },
+  "Audio-Technica":{
+    "3000 Series":[["DE2",470,530],["EG2",560,596]],
+    "5000 Series":[["EF",560,596]],
+    "System10 Pro":[["2.4 GHz",2400,2483,1000]]
+  },
+  "Wisycom":{
+    "MTP40S":[["",470,694]],"MTP41S":[["",470,694]],
+    "MCR42S":[["",470,694]],"MCR42":[["",470,694]],"MPR30":[["",470,694]]
+  },
+  "Lectrosonics":{
+    "SMDa":[["A1",470,614],["B1",614,691]],
+    "DCR822":[["A1",470,614]],
+    "M2T":[["A1",470,614]],
+    "R1a (IEM)":[["A1",470,614]]
+  },
+  "Røde":{
+    "Wireless GO II":[["2.4 GHz",2400,2483,1000]],
+    "Wireless ME":[["2.4 GHz",2400,2483,1000]]
+  },
+  "DJI":{ "Mic 2":[["2.4 GHz",2400,2483,2000]] }
 };
 
-function addMic(count){
-  const name=document.getElementById('micName').value.trim()||('Micro '+(S.mics.length+1));
-  const fmin=S._fmin||470, fmax=S._fmax||694, bw=S._bw||200;
-  const err=document.getElementById('addErr');
-  err.style.display='none';
+const selBrand=document.getElementById('selBrand');
+const selModel=document.getElementById('selModel');
+const selBand=document.getElementById('selBand');
+const micHint=document.getElementById('hint');
+
+function optList(items){return items.map(x=>`<option value="${x}">${x}</option>`).join('');}
+function bandText(b){return (b[0]?b[0]+' · ':'')+b[1]+'–'+b[2]+' MHz';}
+function currentBand(){
+  const bands=(MIC_CATALOG[selBrand.value]||{})[selModel.value];
+  if(!bands||selBand.value==='')return null;
+  return bands[parseInt(selBand.value)];
+}
+
+// remplit la liste des marques au démarrage
+selBrand.innerHTML='<option value="">— Marque —</option>'+optList(Object.keys(MIC_CATALOG));
+
+selBrand.onchange=()=>{
+  const b=selBrand.value;
+  selModel.innerHTML='<option value="">— Modèle —</option>'+(b?optList(Object.keys(MIC_CATALOG[b])):'');
+  selModel.disabled=!b;
+  selBand.innerHTML='<option value="">— Gamme —</option>'; selBand.disabled=true;
+  micHint.textContent='';
+};
+selModel.onchange=()=>{
+  micHint.textContent='';
+  const bands=(MIC_CATALOG[selBrand.value]||{})[selModel.value];
+  if(bands){
+    selBand.innerHTML='<option value="">— Gamme —</option>'+bands.map((b,i)=>`<option value="${i}">${bandText(b)}</option>`).join('');
+    selBand.disabled=false;
+    if(bands.length===1){selBand.value='0';selBand.onchange();} // une seule gamme → sélection auto (renseigne le hint)
+  }else{ selBand.innerHTML='<option value="">— Gamme —</option>'; selBand.disabled=true; }
+};
+selBand.onchange=()=>{
+  const b=currentBand();
+  micHint.textContent=b?`${b[1]}–${b[2]} MHz`:'';
+};
+
+// ── ADD MIC ───────────────────────────────────────────────────────────
+document.getElementById('addBtn').onclick=()=>{
+  const err=document.getElementById('addErr'); err.style.display='none';
+  const band=currentBand();
+  if(!band){err.textContent='Choisis marque, modèle et gamme';err.style.display='inline';return;}
+  const count=Math.max(1,Math.min(32,parseInt(document.getElementById('micCount').value)||1));
+  addMic(band,count);
+};
+
+function addMic(band,count){
+  const fmin=band[1],fmax=band[2],bw=band[3]||200;
+  const base=selModel.value+(band[0]?' '+band[0]:'');
+  const err=document.getElementById('addErr'); err.style.display='none';
+  let added=0;
   for(let i=0;i<count;i++){
-    let freq=i===0&&count===1?parseFloat(document.getElementById('micFreq').value):NaN;
-    if(!freq||isNaN(freq)){
-      freq=autoAssign(fmin,fmax);
-      if(!freq){err.textContent='Aucune fréquence libre dans cette plage';err.style.display='inline';return;}
-    }
-    if(freq<fmin||freq>fmax){err.textContent='Fréquence hors plage modèle';err.style.display='inline';return;}
+    const freq=autoAssign(fmin,fmax);
+    if(!freq){err.textContent=`Plus de fréquence libre dans cette gamme (${added}/${count} placés)`;err.style.display='inline';break;}
     const tntC=S.ch.find(c=>c.occupied&&freq>=c.freq_start&&freq<c.freq_end);
-    S.mics.push({id:Date.now()+i,name:count>1?name+' '+(i+1):name,freq,fmin,fmax,bw,tntConflict:!!tntC,color:MC[S.mics.length%MC.length],imHits:[]});
-    computeIM();
+    S.mics.push({id:Date.now()+i,name:count>1?base+' '+(added+1):base,brand:selBrand.value,model:selModel.value,band:band[0]||'',freq,fmin,fmax,bw,tntConflict:!!tntC,color:MC[S.mics.length%MC.length],imHits:[]});
+    computeIM(); added++;
   }
-  document.getElementById('micName').value='';
-  document.getElementById('micFreq').value='';
-  document.getElementById('selMod').value='';
-  document.getElementById('hint').textContent='';
   renderAll();
 }
 
@@ -766,7 +769,7 @@ function renderTable(){
         <td style="font-weight:600">${m.name}</td>
         <td style="font-family:monospace;color:var(--text2)">${m.fmin} MHz</td>
         <td style="font-family:monospace;font-weight:600;color:${m.color}">${m.freq} MHz</td>
-        <td style="color:var(--text2);font-size:11px">${m.fmin}–${m.fmax} · BW ${m.bw} kHz</td>
+        <td style="color:var(--text2);font-size:11px">${m.brand?m.brand+' ':''}${m.model||''}${m.band?' '+m.band:''}<br><span style="opacity:.7">${m.fmin}–${m.fmax} MHz · BW ${m.bw} kHz</span></td>
         <td style="font-size:11px;color:var(--text2)">±${(m.bw/2).toFixed(0)} kHz</td>
         <td>${sb}</td>
         <td><button class="btn btn-xs" style="border-color:var(--red);color:var(--red);padding:2px 5px" onclick="rmMic(${m.id})"><i class="ti ti-x"></i></button></td></tr>`;
