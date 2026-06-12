@@ -282,11 +282,11 @@ function chanFreqStart(ch){return 302+ch*8;}
 function normKey(k){return k.toLowerCase().replace(/[^a-z0-9]/g,'');}
 function pick(obj,names){for(const k of Object.keys(obj)){if(names.includes(normKey(k)))return obj[k];}return undefined;}
 const FIELDS={
-  ch:['canal','channel','ch','numcanal','numerocanal','num','ncanal','nocanal'],
+  ch:['canal','channel','ch','numcanal','numerocanal','num','ncanal','nocanal','canalstation'],
   mux:['multiplex','mux','plex','nommultiplex'],
   station:['station','nomstation','emetteur','site','nom','libelle'],
   indoor:['indoor','interieur','int','niveauindoor'],
-  outdoor:['outdoor','exterieur','ext','niveauoutdoor','niveau','champ'],
+  outdoor:['outdoor','exterieur','ext','niveauoutdoor','champ','valeurdata'],
   out10:['outdoor10m','outdoor10','exterieur10m','ext10m'],
 };
 function looksLikeChannel(o){if(!o||typeof o!=='object'||Array.isArray(o))return false;const ch=parseInt(pick(o,FIELDS.ch));return !isNaN(ch)&&ch>=21&&ch<=60;}
