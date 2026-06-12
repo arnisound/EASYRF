@@ -667,19 +667,32 @@ function autoAssign(fmin,fmax,sp){
   const minGap=(sp||350)/1000; // espacement demandé (MHz)
   const occ=S.ch.filter(c=>c.occupied).map(c=>({s:c.freq_start,e:c.freq_end}));
   const used=S.mics.map(m=>({f:m.freq,sp:(m.spacing||350)/1000}));
-  // masque des produits 2 tons existants (les 3 tons, en n³, saturraient tout)
-  const im2=maskNew();
-  S.im.forEach(im=>{if(im.f3==null)maskMark(im2,im.freq,0.15);});
-  for(let f=fmin+0.3;f<=fmax-0.3;f+=0.025){
-    f=parseFloat(f.toFixed(3));
-    // reste dans les bandes exploitables (une gamme matérielle peut déborder,
-    // ex. Digital 6000 B1-B4 qui monte à 718 MHz)
-    if(!PLAN_BANDS.some(r=>f>=r[0]&&f<=r[1])) continue;
-    if(occ.some(c=>f>=c.s&&f<c.e)) continue;
-    // respecte le plus grand des deux espacements (le nôtre, celui du voisin)
-    if(used.some(u=>Math.abs(f-u.f)<Math.max(minGap,u.sp))) continue;
-    if(maskHit(im2,f)) continue; // produits 2 tons uniquement
-    return f;
+  // 2 tons : toujours bloquants. 3 tons (en n³) : évités si possible seulement,
+  // sinon ils satureraient tout le spectre au-delà de ~16 micros.
+  const im2=maskNew(),im3=maskNew(),carM=maskNew();
+  S.im.forEach(im=>{if(im.f3==null)maskMark(im2,im.freq,0.15);else maskMark(im3,im.freq,0.1);});
+  used.forEach(u=>maskMark(carM,u.f,0.15));
+  for(const strict of [true,false]){
+    for(let f=fmin+0.3;f<=fmax-0.3;f+=0.025){
+      f=parseFloat(f.toFixed(3));
+      // reste dans les bandes exploitables (une gamme matérielle peut déborder,
+      // ex. Digital 6000 B1-B4 qui monte à 718 MHz)
+      if(!PLAN_BANDS.some(r=>f>=r[0]&&f<=r[1])) continue;
+      if(occ.some(c=>f>=c.s&&f<c.e)) continue;
+      // respecte le plus grand des deux espacements (le nôtre, celui du voisin)
+      if(used.some(u=>Math.abs(f-u.f)<Math.max(minGap,u.sp))) continue;
+      if(maskHit(im2,f)) continue;
+      // les IM 2 tons créées par f ne doivent toucher ni f ni une porteuse posée
+      let bad=false;
+      for(const u of used){
+        for(const im of [2*f-u.f,2*u.f-f,3*f-2*u.f,3*u.f-2*f])
+          if(Math.abs(im-f)<0.15||maskHit(carM,im)){bad=true;break;}
+        if(bad)break;
+      }
+      if(bad) continue;
+      if(strict&&maskHit(im3,f)) continue; // 1re passe : zéro IM, même 3 tons
+      return f;
+    }
   }
   return null;
 }
@@ -710,9 +723,24 @@ function computeIM(){
       }
     }
   }
-  S.mics.forEach(m=>{m.imHits=S.im.filter(im=>Math.abs(im.freq-m.freq)<0.15);});
+  S.mics.forEach(m=>{
+    // 2 tons (2fA−fB…) : critiques. 3 tons (fA+fB−fC) : plus rares (3 émetteurs
+    // simultanés), comptés à part avec une fenêtre plus étroite.
+    m.imHits=S.im.filter(im=>im.f3==null&&Math.abs(im.freq-m.freq)<0.15);
+    m.imHits3=S.im.filter(im=>im.f3!=null&&Math.abs(im.freq-m.freq)<0.1);
+  });
 }
 function L(i){return String.fromCharCode(65+i);}
+
+// Badge d'état d'un micro : conflit TNT > IM 2 tons (critique) > IM 3 tons
+// (plus faible, 3 émetteurs simultanés requis) > OK.
+function micStatusBadge(m){
+  if(m.tntConflict) return '<span class="badge bErr">⚠ TNT</span>';
+  const n2=m.imHits?m.imHits.length:0, n3=m.imHits3?m.imHits3.length:0;
+  if(n2) return `<span class="badge bWarn" title="Produits d'intermodulation 2 tons (2fA−fB / 3fA−2fB) tombant sur cette fréquence">IM×${n2}</span>`;
+  if(n3) return `<span class="badge bIM3" title="Produits 3 tons (fA+fB−fC), plus faibles : audibles seulement si 3 émetteurs proches émettent en même temps">3T×${n3}</span>`;
+  return '<span class="badge bOK">OK</span>';
+}
 
 // ── PLAN AUTO ─────────────────────────────────────────────────────────
 document.getElementById('genBtn').onclick=generatePlan;
@@ -743,16 +771,20 @@ function generatePlan(){
     return wx!==wy?wx-wy:(S.mics[y].spacing||350)-(S.mics[x].spacing||350);
   });
 
+  const GUARD3=0.1; // garde plus étroite pour les IM 3 tons (produits plus rares)
   const placed=new Array(S.mics.length).fill(null);
   const setF=[];            // porteuses posées {freq,sp}
   const imMask=maskNew();   // IM 2 tons du plan (± garde)
+  const im3Mask=maskNew();  // IM 3 tons (fA+fB−fC) du plan (± garde étroite)
   const carMask=maskNew();  // porteuses posées (± garde)
   const polluted=new Set(); // canaux libres « sacrifiés » (contiennent déjà des IM)
   const pairIM=(a,b)=>[2*a-b,2*b-a,3*a-2*b,3*b-2*a];
 
   for(const idx of order){
     const m=S.mics[idx], sp=(m.spacing||350)/1000;
-    let best=null,bestScore=-Infinity;
+    // Phase 1 : tous les candidats sûrs côté 2 tons, notés pour concentrer
+    // les IM dans les canaux TV occupés (sinon dans les canaux sacrifiés).
+    const cands=[];
     for(let f=m.fmin; f<=m.fmax; f=parseFloat((f+0.025).toFixed(3))){
       if(blocked(f)) continue;
       if(setF.some(c=>Math.abs(f-c.freq)<Math.max(sp,c.sp))) continue;
@@ -776,14 +808,34 @@ function generatePlan(){
       }
       if(!ok) continue;
       const minD=setF.length?Math.min(...setF.map(c=>Math.abs(f-c.freq))):5;
-      const total=score+Math.min(minD,1.5);
-      if(total>bestScore){bestScore=total;best=f;}
+      // une porteuse posée sur une IM 3 tons existante part avec un malus
+      cands.push({f,c3:maskHit(im3Mask,f)?1:0,score:score+Math.min(minD,1.5)});
+    }
+    // Phase 2 : parmi les meilleurs candidats (les indemnes d'IM 3 tons
+    // d'abord), choisir celui qui n'est touché par aucune IM 3 tons et n'en
+    // crée aucune sur une porteuse déjà posée.
+    cands.sort((a,b)=>a.c3-b.c3||b.score-a.score);
+    let best=null,bestV=Infinity;
+    for(const c of cands.slice(0,800)){
+      let v=c.c3;
+      cnt: for(let i=0;i<setF.length&&v<bestV;i++)for(let j=i+1;j<setF.length;j++){
+        const a=setF[i].freq,b=setF[j].freq;
+        for(const im of [c.f+a-b,c.f+b-a,a+b-c.f])
+          if(maskHit(carMask,im)||Math.abs(im-c.f)<GUARD3){v++;if(v>=bestV)break cnt;}
+      }
+      if(v<bestV){bestV=v;best=c.f;}
+      if(bestV===0) break; // candidat 100 % propre (et le mieux noté) trouvé
     }
     if(best!=null){
       for(const c of setF) for(const im of pairIM(best,c.freq)){
         maskMark(imMask,im,GUARD);
         const ch=chOf(im);
         if(ch!=null&&legal(im)&&!inOcc(im)) polluted.add(ch);
+      }
+      // IM 3 tons engendrées par la nouvelle porteuse avec chaque paire posée
+      for(let i=0;i<setF.length;i++)for(let j=i+1;j<setF.length;j++){
+        const a=setF[i].freq,b=setF[j].freq;
+        for(const im of [best+a-b,best+b-a,a+b-best]) maskMark(im3Mask,im,GUARD3);
       }
       placed[idx]=best;setF.push({freq:best,sp});
       maskMark(carMask,best,GUARD);
@@ -800,12 +852,20 @@ function generatePlan(){
   const imTV=planIM.filter(im=>im.inOcc).length;
   const imFree=planIM.filter(im=>!im.inOcc).length;
   const sacr=[...polluted].sort((a,b)=>a-b);
+  // IM 3 tons résiduelles tombant sur une porteuse du plan retenu
+  const car3=maskNew(); freqs.forEach(f=>maskMark(car3,f,GUARD3));
+  let res3=0;
+  for(let i=0;i<freqs.length;i++)for(let j=i+1;j<freqs.length;j++)for(let k=0;k<freqs.length;k++){
+    if(k===i||k===j)continue;
+    if(maskHit(car3,freqs[i]+freqs[j]-freqs[k])) res3++;
+  }
 
   const koNames=S.mics.filter((m,i)=>placed[i]==null).map(m=>m.name);
   let h=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
     <span class="badge ${nKO?'bWarn':'bOK'}">${nOK}/${S.mics.length} fréquences placées</span>
     <span class="badge bTV">${imTV} IM en zone TV</span>
     ${imFree>0?`<span class="badge bWarn">${imFree} IM en zone libre${sacr.length?' (canaux sacrifiés : C'+sacr.join(', C')+')':''}</span>`:'<span class="badge bOK">0 IM en zone libre ✓</span>'}
+    ${res3>0?`<span class="badge bWarn" title="Produits fA+fB−fC (3 émetteurs simultanés), plus faibles que les IM 2 tons">${res3} IM 3 tons sur porteuse</span>`:'<span class="badge bOK">0 IM sur les porteuses ✓</span>'}
   </div>`;
   if(koNames.length) h+=`<div style="color:var(--red);font-size:11px;margin-bottom:8px">⚠ Non placés (plage saturée) : ${koNames.join(', ')}</div>`;
   h+='<div class="plan-grid">';
@@ -904,8 +964,7 @@ function renderTable(){
         <td></td></tr>`;
     } else if(it.t==='mic'){
       const m=it.d;
-      const imH=m.imHits&&m.imHits.length?m.imHits.length:0;
-      const sb=m.tntConflict?'<span class="badge bErr">⚠ TNT</span>':(imH?`<span class="badge bWarn">IM×${imH}</span>`:'<span class="badge bOK">OK</span>');
+      const sb=micStatusBadge(m);
       h+=`<tr class="r-mic">
         <td><span class="dot" style="background:${m.color}"></span><span class="badge bMic">${m.kind==="iem"?"IEM":"Micro"}</span></td>
         <td style="font-weight:600">${m.name}</td>
@@ -1117,8 +1176,7 @@ function renderFreqPlan(){
     <th>#</th><th>Nom</th><th>Matériel</th><th>Fréquence (MHz)</th><th>Plage</th><th>Statut</th><th style="width:28px"></th>
   </tr></thead><tbody>`;
   S.mics.forEach((m,i)=>{
-    const imH=m.imHits?m.imHits.length:0;
-    const st=m.tntConflict?'<span class="badge bErr">⚠ TNT</span>':(imH?`<span class="badge bWarn">IM×${imH}</span>`:'<span class="badge bOK">OK</span>');
+    const st=micStatusBadge(m);
     h+=`<tr>
       <td><span class="dot" style="background:${m.color}"></span>${i+1}</td>
       <td><input type="text" value="${(m.name||'').replace(/"/g,'&quot;')}" data-fp="name" data-i="${i}" style="width:150px"></td>
@@ -1158,8 +1216,8 @@ document.getElementById('fpAdd').onclick=()=>{
 };
 
 function exportPlanCsv(){
-  const rows=['Nom,Marque,Modèle,Gamme,Fréquence (MHz),Plage min,Plage max,Espacement (kHz),Conflit TNT,Conflits IM'];
-  S.mics.forEach(m=>rows.push(`"${(m.name||'').replace(/"/g,'""')}",${m.brand||''},${m.model||''},${m.band||''},${m.freq},${m.fmin},${m.fmax},${m.spacing||m.bw},${m.tntConflict?'OUI':'non'},${m.imHits?m.imHits.length:0}`));
+  const rows=['Nom,Marque,Modèle,Gamme,Fréquence (MHz),Plage min,Plage max,Espacement (kHz),Conflit TNT,IM 2 tons,IM 3 tons'];
+  S.mics.forEach(m=>rows.push(`"${(m.name||'').replace(/"/g,'""')}",${m.brand||''},${m.model||''},${m.band||''},${m.freq},${m.fmin},${m.fmax},${m.spacing||m.bw},${m.tntConflict?'OUI':'non'},${m.imHits?m.imHits.length:0},${m.imHits3?m.imHits3.length:0}`));
   const b=new Blob([rows.join('\n')],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a');a.href=URL.createObjectURL(b);
   a.download='easyrf_plan_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
