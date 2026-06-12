@@ -286,7 +286,7 @@ const FIELDS={
   mux:['multiplex','mux','plex','nommultiplex'],
   station:['station','nomstation','emetteur','site','nom','libelle'],
   indoor:['indoor','interieur','int','niveauindoor'],
-  outdoor:['outdoor','exterieur','ext','niveauoutdoor'],
+  outdoor:['outdoor','exterieur','ext','niveauoutdoor','niveau','champ'],
   out10:['outdoor10m','outdoor10','exterieur10m','ext10m'],
 };
 function looksLikeChannel(o){if(!o||typeof o!=='object'||Array.isArray(o))return false;const ch=parseInt(pick(o,FIELDS.ch));return !isNaN(ch)&&ch>=21&&ch<=60;}
@@ -318,28 +318,49 @@ function buildChannels(byCh){
 
 // ── Parseur dédié à l'API Arcom « Ma couverture TNT »
 //    (matnt.arcom.fr/mctnt/api/v1/coordinates-mv3) ──────────────────────
-// Réponse : { mux: { R1: { chaines:[...], ...infos émetteur/canal }, … } }
-// Le canal UHF de chaque mux est cherché dans tout le sous-arbre du mux.
+// Réponse observée :
+//   { success, adresse, lat, lng,
+//     data: [ { R1:{…canal…}, R2:{…}, polar, site_station, lieu_station,
+//               code_station, … },          ← un objet PAR ÉMETTEUR
+//             … ],
+//     mux:  { R1:{chaines:[{nom_chaine,…},…]}, R2:{…}, … } }  ← contenus
+// Le canal UHF de chaque mux se trouve dans data[i].<mux> ; on agrège tous
+// les émetteurs reçus (chaque canal reçu = canal occupé).
 function extractArcom(payload){
-  if(!payload||typeof payload!=='object'||!payload.mux||typeof payload.mux!=='object')return null;
+  if(!payload||typeof payload!=='object')return null;
+  // contenus des mux (pour l'affichage) : payload.mux.R1.chaines → noms
+  const contentOf={};
+  if(payload.mux&&typeof payload.mux==='object'){
+    for(const [m,md] of Object.entries(payload.mux)){
+      const noms=md&&Array.isArray(md.chaines)?md.chaines.map(c=>c&&c.nom_chaine).filter(Boolean):[];
+      if(noms.length)contentOf[m]=noms.slice(0,8).join(', ')+(noms.length>8?'…':'');
+    }
+  }
+  const num=v=>{const n=parseFloat(v);return isNaN(n)?null:n;};
   const byCh=new Map();
-  for(const [muxName,muxData] of Object.entries(payload.mux)){
-    if(!muxData||typeof muxData!=='object')continue;
-    // liste des chaînes du mux (affichée dans le tableau des canaux)
-    const noms=Array.isArray(muxData.chaines)?muxData.chaines.map(c=>c&&c.nom_chaine).filter(Boolean):[];
-    const content=noms.length?noms.slice(0,8).join(', ')+(noms.length>8?'…':''):null;
-    // canaux UHF : sur l'objet mux lui-même ou dans ses sous-objets (émetteurs…)
-    const walk=(n,sta)=>{
-      if(Array.isArray(n)){n.forEach(x=>walk(x,sta));return;}
-      if(!n||typeof n!=='object')return;
-      const staV=pick(n,FIELDS.station);
-      if(staV!=null&&staV!=='')sta=String(staV);
-      const chV=parseInt(pick(n,FIELDS.ch));
-      if(!isNaN(chV)&&chV>=21&&chV<=60&&!byCh.has(chV))
-        byCh.set(chV,{mux:muxName,station:sta||null,content,indoor:null,outdoor:null,outdoor10m:null});
-      Object.values(n).forEach(v=>walk(v,sta));
-    };
-    walk(muxData,null);
+  // cherche récursivement un canal (et niveaux) dans le sous-objet d'un mux
+  const harvest=(n,found)=>{
+    if(Array.isArray(n)){n.forEach(x=>harvest(x,found));return;}
+    if(!n||typeof n!=='object')return;
+    const chV=parseInt(pick(n,FIELDS.ch));
+    if(!isNaN(chV)&&chV>=21&&chV<=60)
+      found.push({ch:chV,outdoor:num(pick(n,FIELDS.outdoor)),indoor:num(pick(n,FIELDS.indoor))});
+    Object.values(n).forEach(v=>harvest(v,found));
+  };
+  const emetteurs=Array.isArray(payload.data)?payload.data:[];
+  for(const em of emetteurs){
+    if(!em||typeof em!=='object')continue;
+    const staName=[em.site_station,em.lieu_station].filter(Boolean).join(' / ')||null;
+    for(const [k,v] of Object.entries(em)){
+      if(!/^R/.test(k)||!v||typeof v!=='object')continue; // R1…R15, RLocal…
+      const found=[];harvest(v,found);
+      for(const f of found){
+        const cur=byCh.get(f.ch);
+        // garde l'émetteur au niveau le plus fort si le canal est vu 2 fois
+        if(!cur||(f.outdoor!=null&&(cur.outdoor==null||f.outdoor>cur.outdoor)))
+          byCh.set(f.ch,{mux:k,station:staName,content:contentOf[k]||null,indoor:f.indoor,outdoor:f.outdoor,outdoor10m:null});
+      }
+    }
   }
   return byCh.size?buildChannels(byCh):null;
 }
