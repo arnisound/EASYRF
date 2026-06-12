@@ -148,7 +148,7 @@ tr:hover td{background:var(--bg2)}
     <select id="selBrand" style="max-width:150px"><option value="">— Marque —</option></select>
     <select id="selModel" style="max-width:180px" disabled><option value="">— Modèle —</option></select>
     <select id="selBand" style="max-width:190px" disabled><option value="">— Gamme —</option></select>
-    <input type="number" id="micCount" min="1" max="32" value="1" title="Nombre de micros" style="width:60px">
+    <input type="number" id="micCount" min="1" max="50" value="1" title="Nombre de micros" style="width:60px">
     <button class="btn btn-green" id="addBtn"><i class="ti ti-plus"></i> Ajouter</button>
     <span id="hint" style="font-size:11px;color:var(--text2)"></span>
     <span id="addErr" style="font-size:11px;color:var(--red);display:none"></span>
@@ -160,7 +160,7 @@ tr:hover td{background:var(--bg2)}
     <select id="selBrandI" style="max-width:150px"><option value="">— Marque —</option></select>
     <select id="selModelI" style="max-width:180px" disabled><option value="">— Modèle —</option></select>
     <select id="selBandI" style="max-width:190px" disabled><option value="">— Gamme —</option></select>
-    <input type="number" id="iemCount" min="1" max="32" value="1" title="Nombre de retours IEM" style="width:60px">
+    <input type="number" id="iemCount" min="1" max="50" value="1" title="Nombre de retours IEM" style="width:60px">
     <button class="btn btn-green" id="addIemBtn"><i class="ti ti-plus"></i> Ajouter</button>
     <span id="hintI" style="font-size:11px;color:var(--text2)"></span>
     <span id="addErrI" style="font-size:11px;color:var(--red);display:none"></span>
@@ -632,7 +632,7 @@ function setupPicker(cfg){
     err.style.display='none';
     const band=cur(),m=md();
     if(!band){err.textContent='Choisis marque, modèle et gamme';err.style.display='inline';return;}
-    const count=Math.max(1,Math.min(32,parseInt(document.getElementById(cfg.count).value)||1));
+    const count=Math.max(1,Math.min(50,parseInt(document.getElementById(cfg.count).value)||1));
     addUnits(band,m.sp,count,sm.value,sb.value,cfg.kind,err);
   };
 }
@@ -654,10 +654,22 @@ function addUnits(band,sp,count,model,brand,kind,err){
 setupPicker({brand:'selBrand', model:'selModel', band:'selBand', count:'micCount', btn:'addBtn',    hint:'hint',  err:'addErr',  catalog:MIC_CATALOG, kind:'mic'});
 setupPicker({brand:'selBrandI',model:'selModelI',band:'selBandI',count:'iemCount',btn:'addIemBtn',hint:'hintI',err:'addErrI',catalog:IEM_CATALOG, kind:'iem'});
 
+// Masques de fréquences : 1 cellule = 25 kHz, marquage ± garde, test O(1).
+const FGRID=40;
+function maskNew(){return new Uint8Array(Math.round(2500*FGRID));}
+function maskMark(mask,f,half){
+  const c=Math.round(f*FGRID),h=Math.round(half*FGRID);
+  for(let i=Math.max(0,c-h),e=Math.min(mask.length-1,c+h);i<=e;i++)mask[i]=1;
+}
+const maskHit=(mask,f)=>mask[Math.round(f*FGRID)]===1;
+
 function autoAssign(fmin,fmax,sp){
   const minGap=(sp||350)/1000; // espacement demandé (MHz)
   const occ=S.ch.filter(c=>c.occupied).map(c=>({s:c.freq_start,e:c.freq_end}));
   const used=S.mics.map(m=>({f:m.freq,sp:(m.spacing||350)/1000}));
+  // masque des produits 2 tons existants (les 3 tons, en n³, saturraient tout)
+  const im2=maskNew();
+  S.im.forEach(im=>{if(im.f3==null)maskMark(im2,im.freq,0.15);});
   for(let f=fmin+0.3;f<=fmax-0.3;f+=0.025){
     f=parseFloat(f.toFixed(3));
     // reste dans les bandes exploitables (une gamme matérielle peut déborder,
@@ -666,8 +678,7 @@ function autoAssign(fmin,fmax,sp){
     if(occ.some(c=>f>=c.s&&f<c.e)) continue;
     // respecte le plus grand des deux espacements (le nôtre, celui du voisin)
     if(used.some(u=>Math.abs(f-u.f)<Math.max(minGap,u.sp))) continue;
-    // seuls les produits 2 tons bloquent (les 3 tons, en n³, saturraient tout)
-    if(S.im.some(im=>im.f3==null&&Math.abs(f-im.freq)<0.15)) continue;
+    if(maskHit(im2,f)) continue; // produits 2 tons uniquement
     return f;
   }
   return null;
@@ -733,8 +744,9 @@ function generatePlan(){
   });
 
   const placed=new Array(S.mics.length).fill(null);
-  const setF=[];          // porteuses posées {freq,sp}
-  const imAll=[];         // IM 2 tons accumulées du plan
+  const setF=[];            // porteuses posées {freq,sp}
+  const imMask=maskNew();   // IM 2 tons du plan (± garde)
+  const carMask=maskNew();  // porteuses posées (± garde)
   const polluted=new Set(); // canaux libres « sacrifiés » (contiennent déjà des IM)
   const pairIM=(a,b)=>[2*a-b,2*b-a,3*a-2*b,3*b-2*a];
 
@@ -745,14 +757,13 @@ function generatePlan(){
       if(blocked(f)) continue;
       if(setF.some(c=>Math.abs(f-c.freq)<Math.max(sp,c.sp))) continue;
       // la porteuse ne doit pas se poser sur une IM déjà créée
-      if(imAll.some(im=>Math.abs(im-f)<GUARD)) continue;
+      if(maskHit(imMask,f)) continue;
       // IM 2 tons créées par f avec chaque porteuse posée
       let ok=true,score=0;
       for(const c of setF){
-        for(let im of pairIM(f,c.freq)){
-          im=parseFloat(im.toFixed(3));
+        for(const im of pairIM(f,c.freq)){
           // une IM sur une porteuse (ou sur f) = interdit
-          if(Math.abs(im-f)<GUARD||setF.some(u=>Math.abs(im-u.freq)<GUARD)){ok=false;break;}
+          if(Math.abs(im-f)<GUARD||maskHit(carMask,im)){ok=false;break;}
           if(inOcc(im)) score+=2;                    // IM en zone TV : idéal
           else if(legal(im)){
             const ch=chOf(im);
@@ -769,13 +780,13 @@ function generatePlan(){
       if(total>bestScore){bestScore=total;best=f;}
     }
     if(best!=null){
-      for(const c of setF) for(let im of pairIM(best,c.freq)){
-        im=parseFloat(im.toFixed(3));
-        imAll.push(im);
+      for(const c of setF) for(const im of pairIM(best,c.freq)){
+        maskMark(imMask,im,GUARD);
         const ch=chOf(im);
         if(ch!=null&&legal(im)&&!inOcc(im)) polluted.add(ch);
       }
       placed[idx]=best;setF.push({freq:best,sp});
+      maskMark(carMask,best,GUARD);
     }
   }
   S.planSlots=S.mics.map((m,i)=>({freq:placed[i],name:m.name,off:placed[i]!=null&&!S.ch.some(c=>placed[i]>=c.freq_start&&placed[i]<c.freq_end)}));
