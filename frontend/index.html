@@ -311,9 +311,37 @@ function buildChannels(byCh){
   const channels=[];
   for(let ch=21;ch<=48;ch++){
     const d=byCh.get(ch),freqStart=chanFreqStart(ch);
-    channels.push({ch,freq_start:freqStart,freq_end:freqStart+8,occupied:!!d,mux:d?d.mux:null,station:d?d.station:null,indoor_dbuvm:d?d.indoor:null,outdoor_dbuvm:d?d.outdoor:null,outdoor10m_dbuvm:d?d.outdoor10m:null,level_dbm:d&&d.outdoor!=null?parseFloat((d.outdoor-109.5).toFixed(1)):null});
+    channels.push({ch,freq_start:freqStart,freq_end:freqStart+8,occupied:!!d,mux:d?d.mux:null,mux_content:d&&d.content?d.content:null,station:d?d.station:null,indoor_dbuvm:d?d.indoor:null,outdoor_dbuvm:d?d.outdoor:null,outdoor10m_dbuvm:d?d.outdoor10m:null,level_dbm:d&&d.outdoor!=null?parseFloat((d.outdoor-109.5).toFixed(1)):null});
   }
   return channels;
+}
+
+// ── Parseur dédié à l'API Arcom « Ma couverture TNT »
+//    (matnt.arcom.fr/mctnt/api/v1/coordinates-mv3) ──────────────────────
+// Réponse : { mux: { R1: { chaines:[...], ...infos émetteur/canal }, … } }
+// Le canal UHF de chaque mux est cherché dans tout le sous-arbre du mux.
+function extractArcom(payload){
+  if(!payload||typeof payload!=='object'||!payload.mux||typeof payload.mux!=='object')return null;
+  const byCh=new Map();
+  for(const [muxName,muxData] of Object.entries(payload.mux)){
+    if(!muxData||typeof muxData!=='object')continue;
+    // liste des chaînes du mux (affichée dans le tableau des canaux)
+    const noms=Array.isArray(muxData.chaines)?muxData.chaines.map(c=>c&&c.nom_chaine).filter(Boolean):[];
+    const content=noms.length?noms.slice(0,8).join(', ')+(noms.length>8?'…':''):null;
+    // canaux UHF : sur l'objet mux lui-même ou dans ses sous-objets (émetteurs…)
+    const walk=(n,sta)=>{
+      if(Array.isArray(n)){n.forEach(x=>walk(x,sta));return;}
+      if(!n||typeof n!=='object')return;
+      const staV=pick(n,FIELDS.station);
+      if(staV!=null&&staV!=='')sta=String(staV);
+      const chV=parseInt(pick(n,FIELDS.ch));
+      if(!isNaN(chV)&&chV>=21&&chV<=60&&!byCh.has(chV))
+        byCh.set(chV,{mux:muxName,station:sta||null,content,indoor:null,outdoor:null,outdoor10m:null});
+      Object.values(n).forEach(v=>walk(v,sta));
+    };
+    walk(muxData,null);
+  }
+  return byCh.size?buildChannels(byCh):null;
 }
 
 // ── Import du CSV officiel (bouton « Télécharger au format CSV » du site
@@ -395,16 +423,31 @@ async function fetchJSONsmart(url,label,timeoutMs){
   throw last||new Error(label+' inaccessible');
 }
 
+// Clé statique publique embarquée dans le site matnt.arcom.fr (pas un secret).
+const ARCOM_CLE='iMc5PxK';
+
 async function getTNTDirect(lat,lon){
-  // 1) géocodage inverse → code INSEE
-  const geo=await fetchJSONsmart(`https://api-adresse.data.gouv.fr/reverse/?lon=${lon}&lat=${lat}`,'géocodage',10000);
-  const props=geo.features&&geo.features[0]&&geo.features[0].properties;
-  if(!props||!props.citycode) throw new Error('aucune commune (point en mer ou hors France ?)');
-  // 2) couverture TNT
-  const payload=await fetchJSONsmart(`https://scanfrequences.anfr.fr/api/data?lat=${lat}&lng=${lon}&insee=${props.citycode}`,'ANFR',12000);
+  // 1) géocodage inverse → commune / code INSEE (non bloquant pour l'Arcom)
+  let city=null,citycode=null;
+  try{
+    const geo=await fetchJSONsmart(`https://api-adresse.data.gouv.fr/reverse/?lon=${lon}&lat=${lat}`,'géocodage',10000);
+    const props=geo.features&&geo.features[0]&&geo.features[0].properties;
+    if(props){city=props.city||props.label||null;citycode=props.citycode||null;}
+  }catch(_){}
+  // 2a) Arcom « Ma couverture TNT » — public, sans compte
+  let arcomErr;
+  try{
+    const adr=encodeURIComponent(city||(lat+', '+lon));
+    const payload=await fetchJSONsmart(`https://matnt.arcom.fr/mctnt/api/v1/coordinates-mv3?adr=${adr}&lat=${lat}&lng=${lon}&type=4&cle=${ARCOM_CLE}`,'Arcom',12000);
+    const channels=extractArcom(payload)||extractChannels(payload);
+    if(!channels) throw new Error('réponse Arcom reçue mais aucun canal trouvé dedans');
+    return {source:'arcom_live',source_label:'Arcom MaTNT'+(city?' — '+city:''),channels};
+  }catch(e){ arcomErr=e; }
+  // 2b) repli : ANFR scanfrequences (souvent bloqué côté serveur)
+  if(!citycode) throw new Error('Arcom : '+(arcomErr&&arcomErr.message||'échec')+' ; géocodage indisponible pour le repli ANFR');
+  const payload=await fetchJSONsmart(`https://scanfrequences.anfr.fr/api/data?lat=${lat}&lng=${lon}&insee=${citycode}`,'ANFR',12000);
   const channels=extractChannels(payload);
   if(!channels) throw new Error('réponse ANFR reçue mais structure non reconnue');
-  const city=props.city||props.label||null;
   return {source:'anfr_live',source_label:'ANFR'+(city?' — '+city:''),channels};
 }
 

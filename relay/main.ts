@@ -7,14 +7,13 @@
 // Usage : GET /?url=<URL encodée>
 //   ex.  /?url=https%3A%2F%2Fscanfrequences.anfr.fr%2Fapi%2Fdata%3Flat%3D...
 //
-// Seuls les hôtes ANFR / CSA / adresse.data.gouv.fr sont autorisés (pas un
+// Seuls les hôtes ANFR / Arcom / adresse.data.gouv.fr sont autorisés (pas un
 // proxy ouvert). Le Referer envoyé en amont dépend de l'hôte cible.
 
 const ALLOWED_HOSTS: Record<string, string> = {
   "scanfrequences.anfr.fr": "https://scanfrequences.anfr.fr/",
   "api-adresse.data.gouv.fr": "https://api-adresse.data.gouv.fr/",
-  "www.csa.fr": "https://www.csa.fr/matnt/couverture",
-  "csa.fr": "https://www.csa.fr/matnt/couverture",
+  "matnt.arcom.fr": "https://www.csa.fr/matnt/couverture",
 };
 
 const BROWSER_HEADERS: HeadersInit = {
