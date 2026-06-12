@@ -7,20 +7,21 @@
 // Usage : GET /?url=<URL encodée>
 //   ex.  /?url=https%3A%2F%2Fscanfrequences.anfr.fr%2Fapi%2Fdata%3Flat%3D...
 //
-// Seuls les hôtes ANFR / adresse.data.gouv.fr sont autorisés (pas un proxy
-// ouvert).
+// Seuls les hôtes ANFR / CSA / adresse.data.gouv.fr sont autorisés (pas un
+// proxy ouvert). Le Referer envoyé en amont dépend de l'hôte cible.
 
-const ALLOWED_HOSTS = [
-  "scanfrequences.anfr.fr",
-  "api-adresse.data.gouv.fr",
-];
+const ALLOWED_HOSTS: Record<string, string> = {
+  "scanfrequences.anfr.fr": "https://scanfrequences.anfr.fr/",
+  "api-adresse.data.gouv.fr": "https://api-adresse.data.gouv.fr/",
+  "www.csa.fr": "https://www.csa.fr/matnt/couverture",
+  "csa.fr": "https://www.csa.fr/matnt/couverture",
+};
 
 const BROWSER_HEADERS: HeadersInit = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
   "Accept": "application/json, text/plain, */*",
   "Accept-Language": "fr-FR,fr;q=0.9",
-  "Referer": "https://scanfrequences.anfr.fr/",
 };
 
 const CORS: HeadersInit = {
@@ -60,7 +61,8 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  if (!ALLOWED_HOSTS.includes(t.hostname)) {
+  const referer = ALLOWED_HOSTS[t.hostname];
+  if (!referer) {
     return new Response(
       JSON.stringify({ error: "hôte non autorisé : " + t.hostname }),
       { status: 403, headers: { ...CORS, "Content-Type": "application/json" } },
@@ -69,7 +71,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const upstream = await fetch(t.toString(), {
-      headers: BROWSER_HEADERS,
+      headers: { ...BROWSER_HEADERS, "Referer": referer },
       signal: AbortSignal.timeout(12000),
     });
     const body = await upstream.text();
