@@ -429,64 +429,91 @@ document.getElementById('scanBtn').onclick=async()=>{
   finally{document.getElementById('scanBtn').disabled=false;}
 };
 
-// ── CATALOGUE MICROS — marque → modèle → gammes [label, fmin, fmax, bw?] ─
+// ── CATALOGUES — marque → modèle → { sp:<channel spacing kHz>, b:[[gamme,fmin,fmax],…] }
+// sp = espacement de coordination recommandé (sans intermodulation) :
+//   Shure numérique 350 · Sennheiser numérique 600 · analogiques ~400 ·
+//   Lectrosonics / Sound Devices / Zaxcom 300 · 2.4 GHz : auto-coordonné (largeur de canal).
 const MIC_CATALOG={
   "Shure":{
-    "QLX-D":[["G50",614,694],["J50",572,636],["H50",534,598]],
-    "ULX-D":[["H50",534,598],["J50",572,636]],
-    "Axient Digital":[["J53",566,636],["G50",614,694]],
-    "SLX-D":[["H50",534,598],["J53",566,636]],
-    "BLX24":[["H9",512,542],["J11",596,616]],
-    "Microflex MX8":[["J53",566,636]]
+    "Axient Digital":{sp:350,b:[["G57",470,608],["H55",514,636],["J53",566,636],["K54",606,694]]},
+    "ULX-D":{sp:350,b:[["G51",470,534],["H51",534,598],["J50",572,636],["K51",606,670]]},
+    "QLX-D":{sp:350,b:[["G51",470,534],["H51",534,598],["J50",572,636],["G50",614,694]]},
+    "SLX-D":{sp:350,b:[["H56",518,582],["J53",566,636],["K59",606,694]]},
+    "BLX":{sp:400,b:[["H9",512,542],["J11",596,616]]},
+    "Microflex MX8":{sp:350,b:[["J53",566,636]]}
   },
   "Sennheiser":{
-    "EW100 G4":[["AW+",470,558]],
-    "EW300 G4":[["AW+",470,558],["GW",558,626]],
-    "EW500 G4":[["AW+",470,558],["GW",558,626]],
-    "EW-DX":[["AW3",520,607],["R1-9",606,694]],
-    "2000 Series":[["AW",470,558],["BW",626,698]],
-    "SK6000":[["AW+",470,558],["GW",558,626]],
-    "Digital 6000":[["A",470,538]]
+    "EW-DX":{sp:600,b:[["S1-10",470,558],["S2-10",614,694],["S4-10",470,694],["AW3",520,607]]},
+    "EW-D":{sp:600,b:[["Q1-6",470,526],["R1-6",520,576],["S1-7",606,662],["U1/5",823,832]]},
+    "Digital 6000":{sp:600,b:[["A1-4",470,558],["A5-8",550,638],["B1-8",626,698]]},
+    "SK 9000 / 6000":{sp:600,b:[["A1-8",470,558],["A5-9",550,638]]},
+    "EW100 G4":{sp:400,b:[["AW+",470,558],["GW",558,626]]},
+    "EW300 G4":{sp:400,b:[["AW+",470,558],["GW",558,626],["GW1",626,698]]},
+    "EW500 G4":{sp:400,b:[["AW+",470,558],["GW",558,626],["GW1",626,698]]},
+    "2000 Series":{sp:400,b:[["AW",470,558],["GW",558,626],["BW",626,698]]}
   },
   "Sony":{
-    "DWX Series":[["",470,606]],
-    "URX-P03D":[["",566,638]],
-    "DWM-02N":[["",558,638]],
-    "UWP-D21":[["",534,608]],
-    "UWP-D26":[["",534,608]]
+    "DWX (numérique)":{sp:400,b:[["470–606",470,606],["566–694",566,694]]},
+    "UWP-D (analogique)":{sp:400,b:[["UC25",536,608],["UC90",470,542],["CE42",638,694]]}
   },
   "Audio-Technica":{
-    "3000 Series":[["DE2",470,530],["EG2",560,596]],
-    "5000 Series":[["EF",560,596]],
-    "System10 Pro":[["2.4 GHz",2400,2483,1000]]
+    "5000 Series (num.)":{sp:350,b:[["DF2",470,530],["EF3",580,694]]},
+    "3000 Series (ana.)":{sp:400,b:[["DE2",470,530],["EG2",560,596],["GG3",626,662]]}
   },
   "Wisycom":{
-    "MTP40S":[["",470,694]],"MTP41S":[["",470,694]],
-    "MCR42S":[["",470,694]],"MCR42":[["",470,694]],"MPR30":[["",470,694]]
+    "MTP40S / MTP41S":{sp:400,b:[["470–694",470,694],["470–960 (large)",470,694]]},
+    "MCR42 / MCR54":{sp:400,b:[["470–694",470,694]]},
+    "MPR50 / MPR52":{sp:400,b:[["470–694",470,694]]}
   },
   "Lectrosonics":{
-    "SMDa":[["A1",470,614],["B1",614,691]],
-    "DCR822":[["A1",470,614]],
-    "M2T":[["A1",470,614]]
+    "Digital Hybrid (SMx, LT)":{sp:300,b:[["A1",470,537],["B1",537,614],["C1",614,691]]},
+    "D Squared (DSQD/DPR)":{sp:300,b:[["470–608",470,608],["614–694",614,694]]},
+    "DCR / M2T":{sp:300,b:[["A1",470,614]]}
+  },
+  "Sound Devices":{
+    "A20-Mini / A20-TX":{sp:300,b:[["A1 (large 470–694)",470,694]]}
+  },
+  "Zaxcom":{
+    "ZMT4 / TRXLT":{sp:300,b:[["470–694",470,694]]}
+  },
+  "AKG":{
+    "DMS800 (num.)":{sp:400,b:[["650–680",650,680],["570–600",570,600]]},
+    "WMS470 (ana.)":{sp:400,b:[["470–694",470,694]]}
+  },
+  "Mipro":{
+    "ACT-5xx / ACT-7xx":{sp:400,b:[["470–694",470,694]]}
+  },
+  "beyerdynamic":{
+    "TG 1000 (num.)":{sp:400,b:[["470–694",470,694]]}
+  },
+  "Audio-Technica (2.4 GHz)":{
+    "System 10 Pro":{sp:1000,b:[["2.4 GHz",2400,2483]]}
   },
   "Røde":{
-    "Wireless GO II":[["2.4 GHz",2400,2483,1000]],
-    "Wireless ME":[["2.4 GHz",2400,2483,1000]]
+    "Wireless GO II":{sp:1000,b:[["2.4 GHz",2400,2483]]},
+    "Wireless ME":{sp:1000,b:[["2.4 GHz",2400,2483]]}
   },
-  "DJI":{ "Mic 2":[["2.4 GHz",2400,2483,2000]] }
+  "DJI":{
+    "Mic 2":{sp:2000,b:[["2.4 GHz",2400,2483]]}
+  }
 };
 
-// Retours in-ear : catalogue séparé pour la ligne « + IEM »
+// Retours in-ear (ear monitors) — ligne « + IEM »
 const IEM_CATALOG={
   "Shure":{
-    "PSM300":[["H20",518,578]],
-    "PSM900":[["G7",470,530]]
+    "PSM300":{sp:400,b:[["H20",518,578],["K12",606,630]]},
+    "PSM900":{sp:400,b:[["G7",470,530],["K1",596,632]]},
+    "PSM1000":{sp:400,b:[["G10",470,542],["J8",554,626],["K10",596,668]]}
   },
   "Sennheiser":{
-    "EW300 IEM G4":[["AW",516,558],["GW",626,668]]
+    "EW IEM G4":{sp:400,b:[["AW+",470,558],["GW",558,626],["GW1",626,698]]},
+    "2000 IEM":{sp:400,b:[["AW",470,558],["BW",626,698]]}
   },
   "Lectrosonics":{
-    "R1a":[["A1",470,614]]
+    "R1a / Duet":{sp:300,b:[["A1",470,614],["B1",614,691]]}
+  },
+  "Wisycom":{
+    "MPR30 IFB":{sp:400,b:[["470–694",470,694]]}
   }
 };
 
@@ -498,8 +525,8 @@ function setupPicker(cfg){
   const sb=document.getElementById(cfg.brand),sm=document.getElementById(cfg.model),
         sg=document.getElementById(cfg.band),hint=document.getElementById(cfg.hint),
         err=document.getElementById(cfg.err);
-  const bandsOf=()=>(cfg.catalog[sb.value]||{})[sm.value];
-  const cur=()=>{const b=bandsOf();return b&&sg.value!==''?b[parseInt(sg.value)]:null;};
+  const md=()=>(cfg.catalog[sb.value]||{})[sm.value];                 // {sp,b}
+  const cur=()=>{const m=md();return m&&sg.value!==''?m.b[parseInt(sg.value)]:null;};
   sb.innerHTML='<option value="">— Marque —</option>'+optList(Object.keys(cfg.catalog));
   sb.onchange=()=>{
     sm.innerHTML='<option value="">— Modèle —</option>'+(sb.value?optList(Object.keys(cfg.catalog[sb.value])):'');
@@ -509,35 +536,35 @@ function setupPicker(cfg){
   };
   sm.onchange=()=>{
     hint.textContent='';
-    const bands=bandsOf();
-    if(bands){
-      sg.innerHTML='<option value="">— Gamme —</option>'+bands.map((b,i)=>`<option value="${i}">${bandText(b)}</option>`).join('');
+    const m=md();
+    if(m){
+      sg.innerHTML='<option value="">— Gamme —</option>'+m.b.map((b,i)=>`<option value="${i}">${bandText(b)}</option>`).join('');
       sg.disabled=false;
-      if(bands.length===1){sg.value='0';sg.onchange();} // une seule gamme → sélection auto
+      if(m.b.length===1){sg.value='0';sg.onchange();} // une seule gamme → sélection auto
     }else{ sg.innerHTML='<option value="">— Gamme —</option>'; sg.disabled=true; }
   };
   sg.onchange=()=>{
-    const b=cur();
-    hint.textContent=b?`${b[1]}–${b[2]} MHz`:'';
+    const b=cur(),m=md();
+    hint.textContent=b?`${b[1]}–${b[2]} MHz · espacement ${m.sp} kHz`:'';
   };
   document.getElementById(cfg.btn).onclick=()=>{
     err.style.display='none';
-    const band=cur();
+    const band=cur(),m=md();
     if(!band){err.textContent='Choisis marque, modèle et gamme';err.style.display='inline';return;}
     const count=Math.max(1,Math.min(32,parseInt(document.getElementById(cfg.count).value)||1));
-    addUnits(band,count,sm.value,sb.value,cfg.kind,err);
+    addUnits(band,m.sp,count,sm.value,sb.value,cfg.kind,err);
   };
 }
 
-function addUnits(band,count,model,brand,kind,err){
-  const fmin=band[1],fmax=band[2],bw=band[3]||200;
+function addUnits(band,sp,count,model,brand,kind,err){
+  const fmin=band[1],fmax=band[2],bw=sp>=1000?sp:200;
   const base=model+(band[0]?' '+band[0]:'');
   let added=0;
   for(let i=0;i<count;i++){
-    const freq=autoAssign(fmin,fmax);
+    const freq=autoAssign(fmin,fmax,sp);
     if(!freq){err.textContent=`Plus de fréquence libre dans cette gamme (${added}/${count} placés)`;err.style.display='inline';break;}
     const tntC=S.ch.find(c=>c.occupied&&freq>=c.freq_start&&freq<c.freq_end);
-    S.mics.push({id:Date.now()+i,name:count>1?base+' '+(added+1):base,brand,model,band:band[0]||'',kind,freq,fmin,fmax,bw,tntConflict:!!tntC,color:MC[S.mics.length%MC.length],imHits:[]});
+    S.mics.push({id:Date.now()+i,name:count>1?base+' '+(added+1):base,brand,model,band:band[0]||'',kind,freq,fmin,fmax,bw,spacing:sp,tntConflict:!!tntC,color:MC[S.mics.length%MC.length],imHits:[]});
     computeIM(); added++;
   }
   renderAll();
@@ -546,13 +573,15 @@ function addUnits(band,count,model,brand,kind,err){
 setupPicker({brand:'selBrand', model:'selModel', band:'selBand', count:'micCount', btn:'addBtn',    hint:'hint',  err:'addErr',  catalog:MIC_CATALOG, kind:'mic'});
 setupPicker({brand:'selBrandI',model:'selModelI',band:'selBandI',count:'iemCount',btn:'addIemBtn',hint:'hintI',err:'addErrI',catalog:IEM_CATALOG, kind:'iem'});
 
-function autoAssign(fmin,fmax){
+function autoAssign(fmin,fmax,sp){
+  const minGap=(sp||350)/1000; // espacement demandé (MHz)
   const occ=S.ch.filter(c=>c.occupied).map(c=>({s:c.freq_start,e:c.freq_end}));
-  const used=S.mics.map(m=>m.freq);
+  const used=S.mics.map(m=>({f:m.freq,sp:(m.spacing||350)/1000}));
   for(let f=fmin+0.3;f<=fmax-0.3;f+=0.025){
     f=parseFloat(f.toFixed(3));
     if(occ.some(c=>f>=c.s&&f<c.e)) continue;
-    if(used.some(u=>Math.abs(f-u)<0.35)) continue;
+    // respecte le plus grand des deux espacements (le nôtre, celui du voisin)
+    if(used.some(u=>Math.abs(f-u.f)<Math.max(minGap,u.sp))) continue;
     if(S.im.some(im=>Math.abs(f-im.freq)<0.15)) continue;
     return f;
   }
@@ -603,6 +632,9 @@ function generatePlan(){
   function inOcc(f){return occZones.some(z=>f>=z.s&&f<z.e);}
   function inFree(f){return freeZones.some(z=>f>=z.s&&f<z.e);}
 
+  // espacement mini imposé = le plus grand channel spacing du parc (MHz)
+  const minSep=Math.max(0.35,...S.mics.map(m=>(m.spacing||350)/1000));
+
   const cands=[];
   freeZones.forEach(z=>{for(let f=z.s+1;f<z.e-1;f+=0.025) cands.push(parseFloat(f.toFixed(3)));});
 
@@ -611,7 +643,7 @@ function generatePlan(){
     let best=null,bestScore=-Infinity;
     for(const f of cands){
       if(!inFree(f)) continue;
-      if(chosen.some(u=>Math.abs(f-u)<0.35)) continue;
+      if(chosen.some(u=>Math.abs(f-u)<minSep)) continue;
       const temp=[...chosen,f];
       let score=0,valid=true;
       const tempIM=[];
@@ -746,7 +778,7 @@ function renderTable(){
         <td style="font-weight:600">${m.name}</td>
         <td style="font-family:monospace;color:var(--text2)">${m.fmin} MHz</td>
         <td style="font-family:monospace;font-weight:600;color:${m.color}">${m.freq} MHz</td>
-        <td style="color:var(--text2);font-size:11px">${m.brand?m.brand+' ':''}${m.model||''}${m.band?' '+m.band:''}<br><span style="opacity:.7">${m.fmin}–${m.fmax} MHz · BW ${m.bw} kHz</span></td>
+        <td style="color:var(--text2);font-size:11px">${m.brand?m.brand+' ':''}${m.model||''}${m.band?' '+m.band:''}<br><span style="opacity:.7">${m.fmin}–${m.fmax} MHz · espacement ${m.spacing||m.bw} kHz</span></td>
         <td style="font-size:11px;color:var(--text2)">±${(m.bw/2).toFixed(0)} kHz</td>
         <td>${sb}</td>
         <td><button class="btn btn-xs" style="border-color:var(--red);color:var(--red);padding:2px 5px" onclick="rmMic(${m.id})"><i class="ti ti-x"></i></button></td></tr>`;
