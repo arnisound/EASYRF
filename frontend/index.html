@@ -105,10 +105,10 @@ tr:hover td{background:var(--bg2)}
 
 <div class="header">
   <div class="logo">EASY<span>RF</span></div>
-  <div class="header-sub">Coordinateur PMSE · France · 470–694 MHz</div>
+  <div class="header-sub">Coordinateur PMSE · France · 470–694 & 822–838 MHz</div>
   <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
     <div class="backend-pill off" id="backendPill">
-      <div class="pulse"></div><span id="backendTxt">Données ANFR en direct</span>
+      <div class="pulse"></div><span id="backendTxt">Données Arcom en direct</span>
     </div>
     <span style="font-size:10px;color:var(--text3)">v1.0</span>
   </div>
@@ -119,27 +119,26 @@ tr:hover td{background:var(--bg2)}
 
 <!-- TOOLBAR -->
 <div class="toolbar">
+  <!-- Ligne 1 : position + analyse | options à droite -->
   <div class="trow">
     <span class="lbl">Lat</span>
     <input type="number" id="lat" value="43.9493" step="0.0001" style="width:84px">
     <span class="lbl">Lon</span>
     <input type="number" id="lon" value="4.8055"  step="0.0001" style="width:84px">
-    <button class="btn btn-xs" id="geoBtn" title="Géolocaliser"><i class="ti ti-current-location"></i></button>
+    <button class="btn" id="geoBtn"><i class="ti ti-current-location"></i> Géolocaliser</button>
     <button class="btn btn-blue" id="scanBtn"><i class="ti ti-broadcast"></i> Analyser TNT</button>
-    <button class="btn" id="csvBtn" title="Importer le fichier « Télécharger au format CSV » de scanfrequences.anfr.fr"><i class="ti ti-file-upload"></i> CSV ANFR</button>
-    <input type="file" id="csvImp" accept=".csv,text/csv" style="display:none">
-    <div class="sep"></div>
-    <button class="btn btn-purple" id="autoBtn"><i class="ti ti-wand"></i> Plan auto</button>
-    <button class="btn btn-xs" id="clearBtn" style="border-color:var(--red);color:var(--red)"><i class="ti ti-trash"></i> Tout effacer</button>
-    <div class="sep"></div>
-    <label class="chk"><input type="checkbox" id="ck3" checked> IM3</label>
-    <label class="chk"><input type="checkbox" id="ck5"> IM5</label>
-    <label class="chk"><input type="checkbox" id="ckB" checked> Bande seule</label>
-    <button class="btn btn-xs" id="csvBtn" style="margin-left:auto"><i class="ti ti-download"></i> CSV</button>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+      <button class="btn btn-xs" id="clearBtn" style="border-color:var(--red);color:var(--red)"><i class="ti ti-trash"></i> Tout effacer</button>
+      <label class="chk"><input type="checkbox" id="ck3" checked> IM3</label>
+      <label class="chk"><input type="checkbox" id="ck5"> IM5</label>
+      <label class="chk"><input type="checkbox" id="ckB" checked> Bande seule</label>
+      <button class="btn btn-xs" id="csvBtn" title="Exporter le plan en CSV"><i class="ti ti-download"></i> CSV</button>
+    </div>
   </div>
 
+  <!-- Ligne 2 : ajout de micros -->
   <div class="trow add-bar">
-    <span class="lbl" style="font-weight:600">+ Micro</span>
+    <span class="lbl" style="font-weight:600;min-width:52px">+ Micro</span>
     <select id="selBrand" style="max-width:150px"><option value="">— Marque —</option></select>
     <select id="selModel" style="max-width:180px" disabled><option value="">— Modèle —</option></select>
     <select id="selBand" style="max-width:190px" disabled><option value="">— Gamme —</option></select>
@@ -147,6 +146,23 @@ tr:hover td{background:var(--bg2)}
     <button class="btn btn-green" id="addBtn"><i class="ti ti-plus"></i> Ajouter</button>
     <span id="hint" style="font-size:11px;color:var(--text2)"></span>
     <span id="addErr" style="font-size:11px;color:var(--red);display:none"></span>
+  </div>
+
+  <!-- Ligne 3 : ajout de retours IEM -->
+  <div class="trow add-bar">
+    <span class="lbl" style="font-weight:600;min-width:52px">+ IEM</span>
+    <select id="selBrandI" style="max-width:150px"><option value="">— Marque —</option></select>
+    <select id="selModelI" style="max-width:180px" disabled><option value="">— Modèle —</option></select>
+    <select id="selBandI" style="max-width:190px" disabled><option value="">— Gamme —</option></select>
+    <input type="number" id="iemCount" min="1" max="32" value="1" title="Nombre de retours IEM" style="width:60px">
+    <button class="btn btn-green" id="addIemBtn"><i class="ti ti-plus"></i> Ajouter</button>
+    <span id="hintI" style="font-size:11px;color:var(--text2)"></span>
+    <span id="addErrI" style="font-size:11px;color:var(--red);display:none"></span>
+  </div>
+
+  <!-- Ligne 4 : génération du plan -->
+  <div class="trow">
+    <button class="btn btn-purple" id="autoBtn" style="padding:9px 22px;font-size:13px"><i class="ti ti-wand"></i> Plan de fréquences automatique</button>
   </div>
 </div>
 
@@ -306,55 +322,11 @@ function extractArcom(payload){
   return byCh.size?buildChannels(byCh):null;
 }
 
-// ── Import du CSV officiel (bouton « Télécharger au format CSV » du site
-//    scanfrequences.anfr.fr) ────────────────────────────────────────────
-function parseAnfrCsv(text){
-  const lines=text.split(/\r?\n/).filter(l=>l.trim());
-  if(lines.length<2)return null;
-  const delim=(lines[0].match(/;/g)||[]).length>=(lines[0].match(/,/g)||[]).length?';':',';
-  const split=l=>l.split(delim).map(c=>c.replace(/^"|"$/g,'').trim());
-  // cherche la ligne d'en-tête (contient une colonne « canal »)
-  let hIdx=-1,cols={};
-  for(let i=0;i<Math.min(lines.length,6);i++){
-    const map={};split(lines[i]).forEach((c,j)=>{map[normKey(c)]=j;});
-    if(FIELDS.ch.some(n=>map[n]!=null)){hIdx=i;cols=map;break;}
-  }
-  if(hIdx<0)return null;
-  const colOf=names=>{for(const n of names){if(cols[n]!=null)return cols[n];}return -1;};
-  const iCh=colOf(FIELDS.ch),iMux=colOf(FIELDS.mux),iSta=colOf(FIELDS.station),
-        iIn=colOf(FIELDS.indoor),iOut=colOf(FIELDS.outdoor),iO10=colOf(FIELDS.out10);
-  const num=v=>{if(v==null||v==='')return null;const n=parseFloat(String(v).replace(',','.'));return isNaN(n)?null:n;};
-  const byCh=new Map();
-  for(let i=hIdx+1;i<lines.length;i++){
-    const c=split(lines[i]);
-    const ch=parseInt(c[iCh]);
-    if(isNaN(ch)||ch<21||ch>60)continue;
-    byCh.set(ch,{mux:iMux>=0&&c[iMux]?c[iMux]:null,station:iSta>=0&&c[iSta]?c[iSta]:null,indoor:iIn>=0?num(c[iIn]):null,outdoor:iOut>=0?num(c[iOut]):null,outdoor10m:iO10>=0?num(c[iO10]):null});
-  }
-  if(byCh.size===0)return null;
-  return buildChannels(byCh);
-}
-
-document.getElementById('csvBtn').onclick=()=>document.getElementById('csvImp').click();
-document.getElementById('csvImp').onchange=async e=>{
-  const f=e.target.files[0];if(!f)return;
-  try{
-    const channels=parseAnfrCsv(await f.text());
-    if(!channels)throw new Error('colonnes non reconnues dans ce fichier');
-    S.ch=channels;
-    const occ=S.ch.filter(c=>c.occupied).length;
-    setSt(`✓ CSV ANFR importé (${f.name}) — ${occ} canaux occupés, ${S.ch.length-occ} libres`);
-    computeIM();renderAll();
-  }catch(err){setSt('Erreur import CSV: '+err.message);}
-  finally{e.target.value='';}
-};
-
 // ── Accès réseau ──────────────────────────────────────────────────────
 // UNE source de données en ligne : l'API publique Arcom « Ma couverture
 // TNT » (matnt.arcom.fr). Deux chemins, dans l'ordre :
 //   1. appel direct depuis le navigateur ;
 //   2. via le relais dédié Deno (relay/main.ts) si le direct est bloqué.
-// En dernier recours manuel : le bouton « CSV ANFR ».
 const RELAY='https://stormy-tiger-34.arnisoundtools.deno.net';
 
 // Clé statique publique embarquée dans le site matnt.arcom.fr (pas un secret).
@@ -453,7 +425,7 @@ document.getElementById('scanBtn').onclick=async()=>{
     const occ=S.ch.filter(c=>c.occupied).length;
     setSt(`✓ ${data.source_label||data.source||'Données chargées'} — ${occ} canaux occupés, ${S.ch.length-occ} libres`);
     computeIM(); renderAll();
-  }catch(e){setSt('Erreur: '+e.message+' — solution fiable : bouton « CSV ANFR » avec le fichier de scanfrequences.anfr.fr');}
+  }catch(e){setSt('Erreur: '+e.message);}
   finally{document.getElementById('scanBtn').disabled=false;}
 };
 
@@ -465,9 +437,7 @@ const MIC_CATALOG={
     "Axient Digital":[["J53",566,636],["G50",614,694]],
     "SLX-D":[["H50",534,598],["J53",566,636]],
     "BLX24":[["H9",512,542],["J11",596,616]],
-    "Microflex MX8":[["J53",566,636]],
-    "PSM300 (IEM)":[["H20",518,578]],
-    "PSM900 (IEM)":[["G7",470,530]]
+    "Microflex MX8":[["J53",566,636]]
   },
   "Sennheiser":{
     "EW100 G4":[["AW+",470,558]],
@@ -476,8 +446,7 @@ const MIC_CATALOG={
     "EW-DX":[["AW3",520,607],["R1-9",606,694]],
     "2000 Series":[["AW",470,558],["BW",626,698]],
     "SK6000":[["AW+",470,558],["GW",558,626]],
-    "Digital 6000":[["A",470,538]],
-    "EW300 IEM":[["AW",516,558],["GW",626,668]]
+    "Digital 6000":[["A",470,538]]
   },
   "Sony":{
     "DWX Series":[["",470,606]],
@@ -498,8 +467,7 @@ const MIC_CATALOG={
   "Lectrosonics":{
     "SMDa":[["A1",470,614],["B1",614,691]],
     "DCR822":[["A1",470,614]],
-    "M2T":[["A1",470,614]],
-    "R1a (IEM)":[["A1",470,614]]
+    "M2T":[["A1",470,614]]
   },
   "Røde":{
     "Wireless GO II":[["2.4 GHz",2400,2483,1000]],
@@ -508,66 +476,75 @@ const MIC_CATALOG={
   "DJI":{ "Mic 2":[["2.4 GHz",2400,2483,2000]] }
 };
 
-const selBrand=document.getElementById('selBrand');
-const selModel=document.getElementById('selModel');
-const selBand=document.getElementById('selBand');
-const micHint=document.getElementById('hint');
+// Retours in-ear : catalogue séparé pour la ligne « + IEM »
+const IEM_CATALOG={
+  "Shure":{
+    "PSM300":[["H20",518,578]],
+    "PSM900":[["G7",470,530]]
+  },
+  "Sennheiser":{
+    "EW300 IEM G4":[["AW",516,558],["GW",626,668]]
+  },
+  "Lectrosonics":{
+    "R1a":[["A1",470,614]]
+  }
+};
 
 function optList(items){return items.map(x=>`<option value="${x}">${x}</option>`).join('');}
 function bandText(b){return (b[0]?b[0]+' · ':'')+b[1]+'–'+b[2]+' MHz';}
-function currentBand(){
-  const bands=(MIC_CATALOG[selBrand.value]||{})[selModel.value];
-  if(!bands||selBand.value==='')return null;
-  return bands[parseInt(selBand.value)];
+
+// Cascade Marque → Modèle → Gamme → Nombre, réutilisée pour micros et IEM.
+function setupPicker(cfg){
+  const sb=document.getElementById(cfg.brand),sm=document.getElementById(cfg.model),
+        sg=document.getElementById(cfg.band),hint=document.getElementById(cfg.hint),
+        err=document.getElementById(cfg.err);
+  const bandsOf=()=>(cfg.catalog[sb.value]||{})[sm.value];
+  const cur=()=>{const b=bandsOf();return b&&sg.value!==''?b[parseInt(sg.value)]:null;};
+  sb.innerHTML='<option value="">— Marque —</option>'+optList(Object.keys(cfg.catalog));
+  sb.onchange=()=>{
+    sm.innerHTML='<option value="">— Modèle —</option>'+(sb.value?optList(Object.keys(cfg.catalog[sb.value])):'');
+    sm.disabled=!sb.value;
+    sg.innerHTML='<option value="">— Gamme —</option>'; sg.disabled=true;
+    hint.textContent='';
+  };
+  sm.onchange=()=>{
+    hint.textContent='';
+    const bands=bandsOf();
+    if(bands){
+      sg.innerHTML='<option value="">— Gamme —</option>'+bands.map((b,i)=>`<option value="${i}">${bandText(b)}</option>`).join('');
+      sg.disabled=false;
+      if(bands.length===1){sg.value='0';sg.onchange();} // une seule gamme → sélection auto
+    }else{ sg.innerHTML='<option value="">— Gamme —</option>'; sg.disabled=true; }
+  };
+  sg.onchange=()=>{
+    const b=cur();
+    hint.textContent=b?`${b[1]}–${b[2]} MHz`:'';
+  };
+  document.getElementById(cfg.btn).onclick=()=>{
+    err.style.display='none';
+    const band=cur();
+    if(!band){err.textContent='Choisis marque, modèle et gamme';err.style.display='inline';return;}
+    const count=Math.max(1,Math.min(32,parseInt(document.getElementById(cfg.count).value)||1));
+    addUnits(band,count,sm.value,sb.value,cfg.kind,err);
+  };
 }
 
-// remplit la liste des marques au démarrage
-selBrand.innerHTML='<option value="">— Marque —</option>'+optList(Object.keys(MIC_CATALOG));
-
-selBrand.onchange=()=>{
-  const b=selBrand.value;
-  selModel.innerHTML='<option value="">— Modèle —</option>'+(b?optList(Object.keys(MIC_CATALOG[b])):'');
-  selModel.disabled=!b;
-  selBand.innerHTML='<option value="">— Gamme —</option>'; selBand.disabled=true;
-  micHint.textContent='';
-};
-selModel.onchange=()=>{
-  micHint.textContent='';
-  const bands=(MIC_CATALOG[selBrand.value]||{})[selModel.value];
-  if(bands){
-    selBand.innerHTML='<option value="">— Gamme —</option>'+bands.map((b,i)=>`<option value="${i}">${bandText(b)}</option>`).join('');
-    selBand.disabled=false;
-    if(bands.length===1){selBand.value='0';selBand.onchange();} // une seule gamme → sélection auto (renseigne le hint)
-  }else{ selBand.innerHTML='<option value="">— Gamme —</option>'; selBand.disabled=true; }
-};
-selBand.onchange=()=>{
-  const b=currentBand();
-  micHint.textContent=b?`${b[1]}–${b[2]} MHz`:'';
-};
-
-// ── ADD MIC ───────────────────────────────────────────────────────────
-document.getElementById('addBtn').onclick=()=>{
-  const err=document.getElementById('addErr'); err.style.display='none';
-  const band=currentBand();
-  if(!band){err.textContent='Choisis marque, modèle et gamme';err.style.display='inline';return;}
-  const count=Math.max(1,Math.min(32,parseInt(document.getElementById('micCount').value)||1));
-  addMic(band,count);
-};
-
-function addMic(band,count){
+function addUnits(band,count,model,brand,kind,err){
   const fmin=band[1],fmax=band[2],bw=band[3]||200;
-  const base=selModel.value+(band[0]?' '+band[0]:'');
-  const err=document.getElementById('addErr'); err.style.display='none';
+  const base=model+(band[0]?' '+band[0]:'');
   let added=0;
   for(let i=0;i<count;i++){
     const freq=autoAssign(fmin,fmax);
     if(!freq){err.textContent=`Plus de fréquence libre dans cette gamme (${added}/${count} placés)`;err.style.display='inline';break;}
     const tntC=S.ch.find(c=>c.occupied&&freq>=c.freq_start&&freq<c.freq_end);
-    S.mics.push({id:Date.now()+i,name:count>1?base+' '+(added+1):base,brand:selBrand.value,model:selModel.value,band:band[0]||'',freq,fmin,fmax,bw,tntConflict:!!tntC,color:MC[S.mics.length%MC.length],imHits:[]});
+    S.mics.push({id:Date.now()+i,name:count>1?base+' '+(added+1):base,brand,model,band:band[0]||'',kind,freq,fmin,fmax,bw,tntConflict:!!tntC,color:MC[S.mics.length%MC.length],imHits:[]});
     computeIM(); added++;
   }
   renderAll();
 }
+
+setupPicker({brand:'selBrand', model:'selModel', band:'selBand', count:'micCount', btn:'addBtn',    hint:'hint',  err:'addErr',  catalog:MIC_CATALOG, kind:'mic'});
+setupPicker({brand:'selBrandI',model:'selModelI',band:'selBandI',count:'iemCount',btn:'addIemBtn',hint:'hintI',err:'addErrI',catalog:IEM_CATALOG, kind:'iem'});
 
 function autoAssign(fmin,fmax){
   const occ=S.ch.filter(c=>c.occupied).map(c=>({s:c.freq_start,e:c.freq_end}));
@@ -765,7 +742,7 @@ function renderTable(){
       const imH=m.imHits&&m.imHits.length?m.imHits.length:0;
       const sb=m.tntConflict?'<span class="badge bErr">⚠ TNT</span>':(imH?`<span class="badge bWarn">IM×${imH}</span>`:'<span class="badge bOK">OK</span>');
       h+=`<tr class="r-mic">
-        <td><span class="dot" style="background:${m.color}"></span><span class="badge bMic">Micro</span></td>
+        <td><span class="dot" style="background:${m.color}"></span><span class="badge bMic">${m.kind==="iem"?"IEM":"Micro"}</span></td>
         <td style="font-weight:600">${m.name}</td>
         <td style="font-family:monospace;color:var(--text2)">${m.fmin} MHz</td>
         <td style="font-family:monospace;font-weight:600;color:${m.color}">${m.freq} MHz</td>
