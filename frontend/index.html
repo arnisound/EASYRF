@@ -387,75 +387,57 @@ document.getElementById('csvImp').onchange=async e=>{
   finally{e.target.value='';}
 };
 
-// Relais dédié (Deno Deploy). Renseigner l'URL de ton service ici, ex. :
-//   const RELAY='https://easyrf-xxxx.deno.dev';
-// Tant qu'il est vide, l'app se rabat sur les relais publics ci-dessous.
+// ── Accès réseau ──────────────────────────────────────────────────────
+// UNE source de données en ligne : l'API publique Arcom « Ma couverture
+// TNT » (matnt.arcom.fr). Deux chemins, dans l'ordre :
+//   1. appel direct depuis le navigateur ;
+//   2. via le relais dédié Deno (relay/main.ts) si le direct est bloqué.
+// En dernier recours manuel : le bouton « CSV ANFR ».
 const RELAY='https://stormy-tiger-34.arnisoundtools.deno.net';
-
-// Relais CORS, essayés dans l'ordre. Le relais dédié (s'il est configuré)
-// passe en premier ; viennent ensuite des relais publics de secours.
-const PROXIES=[
-  ...(RELAY?[u=>RELAY.replace(/\/$/,'')+'/?url='+encodeURIComponent(u)]:[]),
-  u=>'https://corsproxy.io/?url='+encodeURIComponent(u),
-  u=>'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u),
-  u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u),
-];
-
-// Récupère une URL en JSON : essai direct, puis chaque relais en cascade.
-async function fetchJSONsmart(url,label,timeoutMs){
-  // 1) appel direct (réussit si la source autorise le CORS, ex. api-adresse)
-  try{
-    const r=await fetch(url,{signal:AbortSignal.timeout(timeoutMs)});
-    if(r.ok) return await r.json();
-    throw new Error(label+' HTTP '+r.status);
-  }catch(e){
-    if(e&&e.message&&e.message.includes('HTTP')) throw e; // vraie réponse d'erreur
-  }
-  // 2) relais successifs en cas de blocage CORS / timeout
-  let last;
-  for(const mk of PROXIES){
-    try{
-      const r=await fetch(mk(url),{signal:AbortSignal.timeout(timeoutMs)});
-      if(r.ok) return await r.json();
-      last=new Error(label+' (relais) HTTP '+r.status);
-    }catch(e){ last=new Error(label+' (relais) '+(e&&e.message||'échec')); }
-  }
-  throw last||new Error(label+' inaccessible');
-}
 
 // Clé statique publique embarquée dans le site matnt.arcom.fr (pas un secret).
 const ARCOM_CLE='iMc5PxK';
 
-async function getTNTDirect(lat,lon){
-  // 1) géocodage inverse → commune / code INSEE (non bloquant pour l'Arcom)
-  let city=null,citycode=null;
-  try{
-    const geo=await fetchJSONsmart(`https://api-adresse.data.gouv.fr/reverse/?lon=${lon}&lat=${lat}`,'géocodage',10000);
-    const props=geo.features&&geo.features[0]&&geo.features[0].properties;
-    if(props){city=props.city||props.label||null;citycode=props.citycode||null;}
-  }catch(_){}
-  // 2a) Arcom « Ma couverture TNT » — public, sans compte
-  let arcomErr;
-  try{
-    const adr=encodeURIComponent(city||(lat+', '+lon));
-    const payload=await fetchJSONsmart(`https://matnt.arcom.fr/mctnt/api/v1/coordinates-mv3?adr=${adr}&lat=${lat}&lng=${lon}&type=4&cle=${ARCOM_CLE}`,'Arcom',12000);
-    const channels=extractArcom(payload)||extractChannels(payload);
-    if(!channels) throw new Error('réponse Arcom reçue mais aucun canal trouvé dedans');
-    return {source:'arcom_live',source_label:'Arcom MaTNT'+(city?' — '+city:''),channels};
-  }catch(e){ arcomErr=e; }
-  // 2b) repli : ANFR scanfrequences (souvent bloqué côté serveur)
-  if(!citycode) throw new Error('Arcom : '+(arcomErr&&arcomErr.message||'échec')+' ; géocodage indisponible pour le repli ANFR');
-  const payload=await fetchJSONsmart(`https://scanfrequences.anfr.fr/api/data?lat=${lat}&lng=${lon}&insee=${citycode}`,'ANFR',12000);
-  const channels=extractChannels(payload);
-  if(!channels) throw new Error('réponse ANFR reçue mais structure non reconnue');
-  return {source:'anfr_live',source_label:'ANFR'+(city?' — '+city:''),channels};
+async function fetchJson(url,timeoutMs){
+  const r=await fetch(url,{signal:AbortSignal.timeout(timeoutMs)});
+  const txt=await r.text();
+  let data=null; try{data=JSON.parse(txt);}catch(_){}
+  if(!r.ok) throw new Error('HTTP '+r.status+(data&&data.error?' — '+data.error:''));
+  if(data==null) throw new Error('réponse non-JSON');
+  return data;
 }
 
-async function getTNTBackend(lat,lon){
-  const r=await fetch(`${BACKEND}/api/tnt?lat=${lat}&lon=${lon}`,{signal:AbortSignal.timeout(20000)});
-  const data=await r.json();
-  if(!r.ok) throw new Error(data.error||('HTTP '+r.status));
-  return data;
+// Essai direct puis via le relais ; erreurs des deux chemins remontées.
+async function fetchArcom(url){
+  let eDirect;
+  try{ return await fetchJson(url,12000); }
+  catch(e){ eDirect=e; }
+  try{ return await fetchJson(RELAY.replace(/\/$/,'')+'/?url='+encodeURIComponent(url),15000); }
+  catch(eRelay){
+    throw new Error('direct : '+(eDirect.message||'échec')+' · relais : '+(eRelay.message||'échec'));
+  }
+}
+
+async function getTNT(lat,lon){
+  // libellé de commune, purement informatif (api-adresse autorise le CORS)
+  let city=null;
+  try{
+    const geo=await fetchJson(`https://api-adresse.data.gouv.fr/reverse/?lon=${lon}&lat=${lat}`,8000);
+    const p=geo.features&&geo.features[0]&&geo.features[0].properties;
+    if(p)city=p.city||p.label||null;
+  }catch(_){}
+  setSt('Interrogation Arcom MaTNT'+(city?' — '+city:'')+'…');
+  const adr=encodeURIComponent(city||(lat+', '+lon));
+  const payload=await fetchArcom(`https://matnt.arcom.fr/mctnt/api/v1/coordinates-mv3?adr=${adr}&lat=${lat}&lng=${lon}&type=4&cle=${ARCOM_CLE}`);
+  S.lastTNTRaw=payload; // diagnostic : réponse brute consultable en console
+  if(payload&&payload.success===false)
+    throw new Error('Arcom a répondu « échec »'+(payload.message?' : '+payload.message:''));
+  const channels=extractArcom(payload)||extractChannels(payload);
+  if(!channels){
+    console.warn('EASYRF — réponse Arcom reçue mais non comprise :',payload);
+    throw new Error('réponse Arcom reçue mais aucun canal UHF dedans — réponse brute affichée dans la console (F12)');
+  }
+  return {source:'arcom_live',source_label:'Arcom MaTNT'+(city?' — '+city:''),channels};
 }
 
 async function checkBackend(){
@@ -503,13 +485,7 @@ document.getElementById('scanBtn').onclick=async()=>{
   setSt('Analyse TNT en cours...');
   document.getElementById('scanBtn').disabled=true;
   try {
-    let data;
-    try{
-      data=await getTNTDirect(S.lat,S.lon);          // appel direct (en ligne)
-    }catch(directErr){
-      try{ data=await getTNTBackend(S.lat,S.lon); }   // repli backend local
-      catch(_){ throw new Error('données TNT inaccessibles ('+directErr.message+')'); }
-    }
+    const data=await getTNT(S.lat,S.lon);
     if(!data.channels||!data.channels.length) throw new Error('aucun canal renvoyé');
     S.ch=data.channels;
     const occ=S.ch.filter(c=>c.occupied).length;
