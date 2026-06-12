@@ -127,6 +127,12 @@ tr:hover td{background:var(--bg2)}
     <input type="number" id="lon" value="4.8055"  step="0.0001" style="width:84px">
     <button class="btn" id="geoBtn"><i class="ti ti-current-location"></i> Géolocaliser</button>
     <button class="btn btn-blue" id="scanBtn"><i class="ti ti-broadcast"></i> Analyser TNT</button>
+    <select id="exclKm" title="Ignorer les émetteurs TNT au-delà de cette distance : leurs canaux redeviennent utilisables" style="max-width:150px">
+      <option value="0">Émetteurs : tous</option>
+      <option value="30">Émetteurs ≤ 30 km</option>
+      <option value="60">Émetteurs ≤ 60 km</option>
+      <option value="100">Émetteurs ≤ 100 km</option>
+    </select>
     <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
       <button class="btn btn-xs" id="clearBtn" style="border-color:var(--red);color:var(--red)"><i class="ti ti-trash"></i> Tout effacer</button>
       <label class="chk"><input type="checkbox" id="ck3" checked> IM3</label>
@@ -263,7 +269,7 @@ function buildChannels(byCh){
   const channels=[];
   const add=(ch,pmse)=>{
     const d=byCh.get(ch),freqStart=chanFreqStart(ch);
-    channels.push({ch,freq_start:freqStart,freq_end:freqStart+8,occupied:!!d,pmse:!!pmse,mux:d?d.mux:null,mux_content:d&&d.content?d.content:null,station:d?d.station:null,sta_lat:d&&d.sta_lat!=null?d.sta_lat:null,sta_lng:d&&d.sta_lng!=null?d.sta_lng:null,indoor_dbuvm:d?d.indoor:null,outdoor_dbuvm:d?d.outdoor:null,outdoor10m_dbuvm:d?d.outdoor10m:null,level_dbm:d&&d.outdoor!=null?parseFloat((d.outdoor-109.5).toFixed(1)):null});
+    channels.push({ch,freq_start:freqStart,freq_end:freqStart+8,occupied:!!d,pmse:!!pmse,mux:d?d.mux:null,mux_content:d&&d.content?d.content:null,station:d?d.station:null,sta_lat:d&&d.sta_lat!=null?d.sta_lat:null,sta_lng:d&&d.sta_lng!=null?d.sta_lng:null,indoor_dbuvm:d?d.indoor:null,outdoor_dbuvm:d?d.outdoor:null,outdoor10m_dbuvm:d?d.outdoor10m:null,level_dbm:d&&d.outdoor!=null?parseFloat((d.outdoor-109.5).toFixed(1)):null,emitters:d&&d.cands?d.cands:null});
   };
   for(let ch=21;ch<=48;ch++) add(ch,false);
   PMSE_CH.forEach(ch=>add(ch,true)); // toujours libres (pas de TNT dans cette bande)
@@ -312,14 +318,21 @@ function extractArcom(payload){
       if(!/^R/.test(k)||!v||typeof v!=='object')continue; // R1…R15, RLocal…
       const found=[];harvest(v,found);
       for(const f of found){
-        const cur=byCh.get(f.ch);
-        // garde l'émetteur au niveau le plus fort si le canal est vu 2 fois
-        if(!cur||(f.outdoor!=null&&(cur.outdoor==null||f.outdoor>cur.outdoor)))
-          byCh.set(f.ch,{mux:k,station:staName,content:contentOf[k]||null,indoor:f.indoor,outdoor:f.outdoor,outdoor10m:null,sta_lat:sLat,sta_lng:sLng});
+        // garde TOUS les émetteurs candidats du canal (pour le filtre distance)
+        const arr=byCh.get(f.ch)||[];
+        arr.push({mux:k,station:staName,content:contentOf[k]||null,indoor:f.indoor,outdoor:f.outdoor,sta_lat:sLat,sta_lng:sLng});
+        byCh.set(f.ch,arr);
       }
     }
   }
-  return byCh.size?buildChannels(byCh):null;
+  if(!byCh.size)return null;
+  // par canal : émetteur le plus fort en tête + liste complète en réserve
+  const bestBy=new Map();
+  for(const [ch,arr] of byCh){
+    const sorted=arr.slice().sort((a,b)=>((b.outdoor!=null?b.outdoor:-999))-((a.outdoor!=null?a.outdoor:-999)));
+    bestBy.set(ch,{...sorted[0],outdoor10m:null,cands:sorted});
+  }
+  return buildChannels(bestBy);
 }
 
 // ── Accès réseau ──────────────────────────────────────────────────────
@@ -422,11 +435,55 @@ document.getElementById('scanBtn').onclick=async()=>{
     const data=await getTNT(S.lat,S.lon);
     if(!data.channels||!data.channels.length) throw new Error('aucun canal renvoyé');
     S.ch=data.channels;
+    const excl=applyExclusion(); // applique le filtre distance courant
     const occ=S.ch.filter(c=>c.occupied).length;
-    setSt(`✓ ${data.source_label||data.source||'Données chargées'} — ${occ} canaux occupés, ${S.ch.length-occ} libres`);
+    setSt(`✓ ${data.source_label||data.source||'Données chargées'} — ${occ} canaux occupés, ${S.ch.length-occ} libres`+(excl?` (${excl} émetteur(s) lointain(s) ignoré(s))`:''));
     computeIM(); renderAll();
   }catch(e){setSt('Erreur: '+e.message);}
   finally{document.getElementById('scanBtn').disabled=false;}
+};
+
+// ── EXCLUSION D'ÉMETTEURS PAR DISTANCE ───────────────────────────────
+// Recalcule l'occupation de chaque canal en ignorant les émetteurs situés
+// au-delà de la distance choisie. Renvoie le nombre d'émetteurs ignorés.
+// Un émetteur sans coordonnées est conservé (prudence).
+function applyExclusion(){
+  const km=parseFloat(document.getElementById('exclKm').value)||0;
+  let ignored=0;
+  S.ch.forEach(c=>{
+    if(!c.emitters||!c.emitters.length) return; // canal PMSE ou libre d'origine
+    let cands=c.emitters;
+    if(km>0&&S.lat!=null&&S.lon!=null){
+      cands=cands.filter(e=>{
+        if(e.sta_lat==null||e.sta_lng==null) return true;
+        return distKm(S.lat,S.lon,e.sta_lat,e.sta_lng)<=km;
+      });
+      ignored+=c.emitters.length-cands.length;
+    }
+    const best=cands[0]||null; // déjà triés du plus fort au plus faible
+    c.occupied=!!best;
+    c.mux=best?best.mux:null;
+    c.station=best?best.station:null;
+    c.mux_content=best?best.content:null;
+    c.sta_lat=best?best.sta_lat:null;
+    c.sta_lng=best?best.sta_lng:null;
+    c.indoor_dbuvm=best?best.indoor:null;
+    c.outdoor_dbuvm=best?best.outdoor:null;
+    c.level_dbm=best&&best.outdoor!=null?parseFloat((best.outdoor-109.5).toFixed(1)):null;
+  });
+  // les conflits TNT des micros déjà placés changent avec l'occupation
+  S.mics.forEach(m=>{m.tntConflict=S.ch.some(c=>c.occupied&&m.freq>=c.freq_start&&m.freq<c.freq_end);});
+  return ignored;
+}
+
+document.getElementById('exclKm').onchange=()=>{
+  if(!S.ch.length){setSt('Lancez d\'abord l\'analyse TNT.');return;}
+  const ignored=applyExclusion();
+  const occ=S.ch.filter(c=>c.occupied).length;
+  const km=parseFloat(document.getElementById('exclKm').value)||0;
+  setSt(km?`Filtre ≤ ${km} km : ${occ} canaux occupés, ${S.ch.length-occ} libres (${ignored} émetteur(s) ignoré(s))`
+          :`Tous émetteurs : ${occ} canaux occupés, ${S.ch.length-occ} libres`);
+  computeIM(); renderAll();
 };
 
 // ── CATALOGUES — marque → modèle → { sp:<channel spacing kHz>, b:[[gamme,fmin,fmax],…] }
