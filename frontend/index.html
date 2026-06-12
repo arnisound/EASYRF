@@ -896,8 +896,33 @@ function renderTable(){
 function rmMic(id){S.mics=S.mics.filter(m=>m.id!==id);computeIM();renderAll();}
 
 // ── SPECTRUM ──────────────────────────────────────────────────────────
+// Échelle « virtuelle » : les bandes utiles sont à l'échelle, les zones
+// interdites (mobile) sont compressées. Zoom à la molette, déplacement par
+// glisser, double-clic = vue complète.
+const SPEC_SEGS=[
+  {a:470,b:694},
+  {gap:1,a:694,b:822,label:'réservé 3G / 4G'},
+  {a:822,b:838},
+  {gap:1,a:838,b:863,label:'réservé'},
+  {a:863,b:865}
+];
+const GAPU=14; // largeur (en « MHz virtuels ») d'une zone compressée
+const SPEC_U=SPEC_SEGS.reduce((t,g)=>t+(g.gap?GAPU:g.b-g.a),0);
+let specU0=0,specU1=SPEC_U; // fenêtre de vue courante
+function uOf(f){
+  let u=0;
+  for(const g of SPEC_SEGS){
+    const len=g.gap?GAPU:(g.b-g.a);
+    if(f<=g.a)return u;
+    if(f>=g.b){u+=len;continue;}
+    return u+len*(f-g.a)/(g.b-g.a);
+  }
+  return u;
+}
+
 function drawSpec(){
   const cv=document.getElementById('cv');
+  if(!cv||!cv.parentElement)return;
   const ctx=cv.getContext('2d');
   const W=cv.parentElement.offsetWidth-32||640,H=180;
   const D=window.devicePixelRatio||1;
@@ -905,38 +930,44 @@ function drawSpec(){
   ctx.scale(D,D);
   const dark=matchMedia('(prefers-color-scheme:dark)').matches;
   ctx.clearRect(0,0,W,H);
-  // Échelle en deux segments : bande TNT 470–694, puis canaux PMSE 822–838,
-  // séparés par une zone compressée (694–822 : réservé 3G/4G).
-  const T1=470,T2=694,P1=822,P2=838,GAPW=34,BH=H-22;
-  const FMIN=T1,FMAX=P2;
-  const pxMHz=(W-GAPW)/((T2-T1)+(P2-P1));
-  const fx=f=> f<=T2 ? (f-T1)*pxMHz
-            : f<P1 ? (T2-T1)*pxMHz+GAPW*(f-T2)/(P1-T2)
-            : (T2-T1)*pxMHz+GAPW+(f-P1)*pxMHz;
+  const BH=H-22;
+  const span=specU1-specU0;
+  const fx=f=>(uOf(f)-specU0)/span*W;
+  const FMIN=470,FMAX=865;
 
-  // zone 694–822 MHz réservée à la téléphonie mobile
-  const gx1=fx(T2),gx2=fx(P1);
-  ctx.fillStyle=dark?'rgba(255,255,255,.04)':'rgba(0,0,0,.04)';
-  ctx.fillRect(gx1,0,gx2-gx1,BH);
-  ctx.strokeStyle=dark?'rgba(255,255,255,.15)':'rgba(0,0,0,.15)';
-  ctx.lineWidth=.5;ctx.setLineDash([3,3]);
-  ctx.beginPath();ctx.moveTo(gx1+.5,0);ctx.lineTo(gx1+.5,BH);
-  ctx.moveTo(gx2-.5,0);ctx.lineTo(gx2-.5,BH);ctx.stroke();ctx.setLineDash([]);
-  ctx.save();
-  ctx.translate((gx1+gx2)/2,BH/2);ctx.rotate(-Math.PI/2);
-  ctx.fillStyle=dark?'rgba(255,255,255,.35)':'rgba(0,0,0,.35)';
-  ctx.font='9px sans-serif';ctx.textAlign='center';
-  ctx.fillText('réservé 3G / 4G',0,3);
-  ctx.restore();
+  // zones compressées (mobile…)
+  SPEC_SEGS.filter(g=>g.gap).forEach(g=>{
+    const x1=fx(g.a),x2=fx(g.b);
+    if(x2<0||x1>W)return;
+    const cx1=Math.max(x1,0),cx2=Math.min(x2,W);
+    ctx.fillStyle=dark?'rgba(255,255,255,.04)':'rgba(0,0,0,.04)';
+    ctx.fillRect(cx1,0,cx2-cx1,BH);
+    ctx.strokeStyle=dark?'rgba(255,255,255,.15)':'rgba(0,0,0,.15)';
+    ctx.lineWidth=.5;ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.moveTo(x1+.5,0);ctx.lineTo(x1+.5,BH);
+    ctx.moveTo(x2-.5,0);ctx.lineTo(x2-.5,BH);ctx.stroke();ctx.setLineDash([]);
+    if(cx2-cx1>=12){
+      ctx.save();
+      ctx.translate((cx1+cx2)/2,BH/2);ctx.rotate(-Math.PI/2);
+      ctx.fillStyle=dark?'rgba(255,255,255,.35)':'rgba(0,0,0,.35)';
+      ctx.font='9px sans-serif';ctx.textAlign='center';
+      ctx.fillText(g.label,0,3);
+      ctx.restore();
+    }
+  });
 
+  // trame des canaux (8 MHz) dans la bande TNT + séparation 830
   ctx.strokeStyle=dark?'rgba(255,255,255,.05)':'rgba(0,0,0,.05)';
   ctx.lineWidth=.5;
-  for(let f=478;f<T2;f+=8){ctx.beginPath();ctx.moveTo(fx(f),0);ctx.lineTo(fx(f),BH);ctx.stroke();}
-  ctx.beginPath();ctx.moveTo(fx(830),0);ctx.lineTo(fx(830),BH);ctx.stroke();
+  for(let f=478;f<694;f+=8){const x=fx(f);if(x<0||x>W)continue;ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,BH);ctx.stroke();}
+  {const x=fx(830);if(x>=0&&x<=W){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,BH);ctx.stroke();}}
 
+  // canaux TV
   S.ch.forEach(c=>{
-    if(c.freq_end<=FMIN||c.freq_start>=FMAX) return;
-    const x1=fx(Math.max(c.freq_start,FMIN))+.5,x2=fx(Math.min(c.freq_end,FMAX))-.5,w=x2-x1;
+    const x1r=fx(c.freq_start),x2r=fx(c.freq_end);
+    if(x2r<0||x1r>W)return;
+    const x1=Math.max(x1r,0)+.5,x2=Math.min(x2r,W)-.5,w=x2-x1;
+    if(w<=0)return;
     ctx.fillStyle=c.occupied?(dark?'rgba(163,45,45,.25)':'rgba(163,45,45,.1)'):(dark?'rgba(59,109,17,.2)':'rgba(59,109,17,.08)');
     ctx.fillRect(x1,0,w,BH);
     ctx.strokeStyle=c.occupied?'#A32D2D':'#639922';
@@ -948,33 +979,87 @@ function drawSpec(){
     }
   });
 
+  // liserés : plage accordable de chaque modèle présent (une bande par modèle)
+  const seen=new Set(),models=[];
+  S.mics.forEach(m=>{const k=m.fmin+'-'+m.fmax;if(seen.has(k))return;seen.add(k);models.push(m);});
+  models.forEach((m,r)=>{
+    const x1r=fx(m.fmin),x2r=fx(m.fmax);
+    if(x2r<0||x1r>W)return;
+    const x1=Math.max(x1r,0),x2=Math.min(x2r,W),y=2+r*5;
+    ctx.globalAlpha=.85;
+    ctx.fillStyle=m.color;
+    ctx.fillRect(x1,y,Math.max(2,x2-x1),3);
+    ctx.globalAlpha=1;
+  });
+  const stripH=models.length?2+models.length*5+4:10;
+
+  // produits d'intermodulation
   if(S.show5) S.im.filter(im=>im.ord===5&&(!S.onlyB||(im.freq>=FMIN&&im.freq<=FMAX))).forEach(im=>{
-    const x=fx(im.freq);
+    const x=fx(im.freq);if(x<0||x>W)return;
     ctx.strokeStyle='rgba(186,117,23,.5)';ctx.lineWidth=.8;ctx.setLineDash([2,4]);
     ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,BH);ctx.stroke();ctx.setLineDash([]);
   });
-
   if(S.show3) S.im.filter(im=>im.ord===3&&(!S.onlyB||(im.freq>=FMIN&&im.freq<=FMAX))).forEach(im=>{
-    const x=fx(im.freq);
+    const x=fx(im.freq);if(x<0||x>W)return;
     ctx.strokeStyle='rgba(133,79,11,.7)';ctx.lineWidth=1.2;ctx.setLineDash([3,3]);
     ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,BH);ctx.stroke();ctx.setLineDash([]);
   });
 
+  // micros
   S.mics.forEach((m,i)=>{
-    if(m.freq<FMIN||m.freq>FMAX) return;
-    const xc=fx(m.freq),bwPx=fx(m.freq+m.bw/2000)-fx(m.freq);
+    const xc=fx(m.freq);if(xc<0||xc>W)return;
+    const bwPx=Math.abs(fx(m.freq+m.bw/2000)-xc);
     ctx.fillStyle=m.color+'22';ctx.fillRect(xc-bwPx,0,bwPx*2,BH);
     ctx.fillStyle=m.color;ctx.fillRect(xc-1.5,0,3,BH);
     ctx.font='bold 9px sans-serif';ctx.textAlign='center';ctx.fillStyle=m.color;
-    ctx.fillText('M'+(i+1),xc,10);
+    ctx.fillText('M'+(i+1),xc,stripH+8);
   });
 
+  // graduations adaptées au niveau de zoom
   ctx.fillStyle=dark?'rgba(255,255,255,.4)':'rgba(0,0,0,.4)';
   ctx.font='9px sans-serif';ctx.textAlign='center';
-  for(let f=480;f<=690;f+=10) ctx.fillText(f,fx(f),H-5);
-  [826,834].forEach(f=>ctx.fillText(f,fx(f),H-5)); // centres des canaux 65/66
+  const step=span>180?10:span>90?5:span>40?2:1;
+  SPEC_SEGS.filter(g=>!g.gap).forEach(g=>{
+    for(let f=Math.ceil(g.a/step)*step;f<=g.b;f+=step){
+      const x=fx(f);if(x<10||x>W-10)continue;
+      ctx.fillText(f,x,H-5);
+    }
+  });
   ctx.textAlign='left';ctx.fillText('MHz',2,H-5);
+  // aide navigation
+  ctx.textAlign='right';
+  ctx.fillStyle=dark?'rgba(255,255,255,.25)':'rgba(0,0,0,.25)';
+  ctx.fillText(span<SPEC_U-1?'double-clic : vue complète':'molette : zoom · glisser : déplacer',W-4,10);
 }
+
+// interactions zoom / déplacement (attachées une seule fois)
+(function(){
+  const cv=document.getElementById('cv');
+  if(!cv)return;
+  cv.style.cursor='grab';
+  cv.addEventListener('wheel',e=>{
+    e.preventDefault();
+    const r=cv.getBoundingClientRect(),x=e.clientX-r.left;
+    const span=specU1-specU0,uc=specU0+x/r.width*span;
+    const ns=Math.min(SPEC_U,Math.max(2,span*(e.deltaY<0?1/1.25:1.25)));
+    let n0=uc-(x/r.width)*ns;
+    n0=Math.max(0,Math.min(n0,SPEC_U-ns));
+    specU0=n0;specU1=n0+ns;
+    drawSpec();
+  },{passive:false});
+  let drag=null;
+  cv.addEventListener('mousedown',e=>{drag={x:e.clientX,u0:specU0,u1:specU1};cv.style.cursor='grabbing';});
+  window.addEventListener('mousemove',e=>{
+    if(!drag)return;
+    const r=cv.getBoundingClientRect(),sp=drag.u1-drag.u0;
+    let du=-(e.clientX-drag.x)/r.width*sp;
+    du=Math.max(-drag.u0,Math.min(du,SPEC_U-drag.u1));
+    specU0=drag.u0+du;specU1=drag.u1+du;
+    drawSpec();
+  });
+  window.addEventListener('mouseup',()=>{if(drag){drag=null;cv.style.cursor='grab';}});
+  cv.addEventListener('dblclick',()=>{specU0=0;specU1=SPEC_U;drawSpec();});
+})();
 
 document.getElementById('ck3').onchange=e=>{S.show3=e.target.checked;renderAll();};
 document.getElementById('ck5').onchange=e=>{S.show5=e.target.checked;renderAll();};
