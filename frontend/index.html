@@ -631,65 +631,84 @@ document.getElementById('genBtn').onclick=generatePlan;
 document.getElementById('applyBtn').onclick=applyPlan;
 document.getElementById('autoBtn').onclick=()=>{showTab('plan');generatePlan();};
 
+// Bandes légalement exploitables pour les micros HF en France (MHz) :
+// TNT 470–694 (selon canaux libres), PMSE 823–832, bande libre 863–865,
+// systèmes 2.4 GHz. Le reste (694–822 mobile, etc.) est interdit.
+const PLAN_BANDS=[[470,694],[822,838],[863,865],[2400,2483.5]];
+
 function generatePlan(){
   const pr=document.getElementById('planOut');
   if(!S.ch.length){pr.innerHTML='<span style="color:var(--red)">Lancez d\'abord l\'analyse TNT.</span>';return;}
-  const N=Math.max(S.mics.length,1);
-  const freeZones=S.ch.filter(c=>!c.occupied).map(c=>({s:c.freq_start,e:c.freq_end,ch:c.ch}));
+  if(!S.mics.length){pr.innerHTML='<span style="color:var(--red)">Ajoutez d\'abord des micros / IEM.</span>';return;}
   const occZones=S.ch.filter(c=>c.occupied).map(c=>({s:c.freq_start,e:c.freq_end,ch:c.ch}));
-  function inOcc(f){return occZones.some(z=>f>=z.s&&f<z.e);}
-  function inFree(f){return freeZones.some(z=>f>=z.s&&f<z.e);}
+  const inOcc=f=>occZones.some(z=>f>=z.s&&f<z.e);
+  const legal=f=>PLAN_BANDS.some(r=>f>=r[0]&&f<=r[1]);
+  // bloqué : canal TNT occupé (avec garde 300 kHz) ou hors bande exploitable
+  const nearOcc=f=>occZones.some(z=>f>z.s-0.3&&f<z.e+0.3);
+  const blocked=f=>nearOcc(f)||!legal(f);
 
-  // espacement mini imposé = le plus grand channel spacing du parc (MHz)
-  const minSep=Math.max(0.35,...S.mics.map(m=>(m.spacing||350)/1000));
+  // produits d'intermodulation 2 porteuses (IM3 et IM5) entre a et b
+  const pairIM=(a,b)=>[2*a-b,2*b-a,3*a-2*b,3*b-2*a];
 
-  const cands=[];
-  freeZones.forEach(z=>{for(let f=z.s+1;f<z.e-1;f+=0.025) cands.push(parseFloat(f.toFixed(3)));});
+  // on place les micros les plus contraints d'abord (plage étroite, spacing large)
+  const order=S.mics.map((m,i)=>i).sort((x,y)=>{
+    const wx=S.mics[x].fmax-S.mics[x].fmin, wy=S.mics[y].fmax-S.mics[y].fmin;
+    return wx!==wy?wx-wy:(S.mics[y].spacing||350)-(S.mics[x].spacing||350);
+  });
 
-  const chosen=[];
-  for(let n=0;n<N;n++){
+  const placed=new Array(S.mics.length).fill(null); // freq par micro (ordre S.mics)
+  const setF=[]; // {freq, sp}
+  for(const idx of order){
+    const m=S.mics[idx], sp=(m.spacing||350)/1000;
     let best=null,bestScore=-Infinity;
-    for(const f of cands){
-      if(!inFree(f)) continue;
-      if(chosen.some(u=>Math.abs(f-u)<minSep)) continue;
-      const temp=[...chosen,f];
-      let score=0,valid=true;
-      const tempIM=[];
-      for(let i=0;i<temp.length;i++) for(let j=i+1;j<temp.length;j++){
-        const a=temp[i],b=temp[j];
-        [2*a-b,2*b-a,3*a-2*b,3*b-2*a].forEach(im=>{if(im>470&&im<694) tempIM.push(parseFloat(im.toFixed(3)));});
+    for(let f=m.fmin; f<=m.fmax; f=parseFloat((f+0.025).toFixed(3))){
+      if(blocked(f)) continue;
+      // espacement : respecte le plus grand des deux channel spacings
+      if(setF.some(c=>Math.abs(f-c.freq)<Math.max(sp,c.sp))) continue;
+      // évalue les IM introduites par cette fréquence
+      let score=0,ok=true;
+      const ims=[];
+      for(const c of setF) pairIM(f,c.freq).forEach(v=>ims.push(v));
+      for(let i=0;i<setF.length&&ok;i++) for(let j=i+1;j<setF.length;j++){
+        ims.push(f+setF[i].freq-setF[j].freq, f+setF[j].freq-setF[i].freq, setF[i].freq+setF[j].freq-f);
       }
-      for(const im of tempIM){
-        if(inOcc(im)) score+=3;
-        else if(!inFree(im)) score+=1;
-        else{ if(temp.some(fr=>Math.abs(fr-im)<0.15)){valid=false;break;} score-=2; }
+      for(let im of ims){
+        im=parseFloat(im.toFixed(3));
+        if(inOcc(im)) score+=2;                 // IM tombe dans un canal TNT → poubelle, parfait
+        else if(legal(im)){                      // IM dans une zone exploitable → risqué
+          if(Math.abs(im-f)<0.1||setF.some(c=>Math.abs(im-c.freq)<0.1)){ok=false;break;} // sur une porteuse
+          score-=3;
+        }                                        // sinon (hors bande) → neutre
       }
-      const minD=chosen.length?Math.min(...chosen.map(u=>Math.abs(f-u))):999;
-      const total=score+(valid?10:0)+Math.min(minD,2);
-      if(valid&&total>bestScore){bestScore=total;best=f;}
+      if(!ok) continue;
+      const minD=setF.length?Math.min(...setF.map(c=>Math.abs(f-c.freq))):5;
+      const total=score+Math.min(minD,1.5);
+      if(total>bestScore){bestScore=total;best=f;}
     }
-    if(best){chosen.push(best);}
+    if(best!=null){placed[idx]=best;setF.push({freq:best,sp});}
   }
-  S.planSlots=chosen.map((f,i)=>({freq:f,name:S.mics[i]?S.mics[i].name:'Micro '+(i+1)}));
+  S.planSlots=S.mics.map((m,i)=>({freq:placed[i],name:m.name,off:placed[i]!=null&&!S.ch.some(c=>placed[i]>=c.freq_start&&placed[i]<c.freq_end)}));
 
+  const freqs=placed.filter(f=>f!=null);
+  const nOK=freqs.length, nKO=S.mics.length-nOK;
+  // bilan IM sur le plan retenu (paires)
   const planIM=[];
-  for(let i=0;i<chosen.length;i++) for(let j=i+1;j<chosen.length;j++){
-    const a=chosen[i],b=chosen[j];
-    [2*a-b,2*b-a,3*a-2*b,3*b-2*a].forEach(im=>{
-      if(im>470&&im<694) planIM.push({freq:parseFloat(im.toFixed(3)),inOcc:inOcc(im)});
-    });
-  }
+  for(let i=0;i<freqs.length;i++) for(let j=i+1;j<freqs.length;j++)
+    pairIM(freqs[i],freqs[j]).forEach(v=>{const im=parseFloat(v.toFixed(3));if(legal(im)||inOcc(im))planIM.push({freq:im,inOcc:inOcc(im)});});
   const imPoubelle=planIM.filter(im=>im.inOcc).length;
   const imFree=planIM.filter(im=>!im.inOcc).length;
 
+  const koNames=S.mics.filter((m,i)=>placed[i]==null).map(m=>m.name);
   let h=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-    <span class="badge bOK">${chosen.length}/${N} fréquences placées</span>
+    <span class="badge ${nKO?'bWarn':'bOK'}">${nOK}/${S.mics.length} fréquences placées</span>
     <span class="badge bTV">${imPoubelle} IM → poubelle TV</span>
     ${imFree>0?`<span class="badge bErr">${imFree} IM en zone libre</span>`:'<span class="badge bOK">0 IM en zone libre ✓</span>'}
-  </div><div class="plan-grid">`;
+  </div>`;
+  if(koNames.length) h+=`<div style="color:var(--red);font-size:11px;margin-bottom:8px">⚠ Non placés (plage saturée) : ${koNames.join(', ')}</div>`;
+  h+='<div class="plan-grid">';
 
   S.ch.forEach(ch=>{
-    const micsInCh=chosen.filter(f=>f>=ch.freq_start&&f<ch.freq_end);
+    const micsInCh=freqs.filter(f=>f>=ch.freq_start&&f<ch.freq_end);
     const imInCh=planIM.filter(im=>im.freq>=ch.freq_start&&im.freq<ch.freq_end);
     let cls='plan-slot';
     if(ch.occupied) cls+=' taken';
@@ -705,13 +724,17 @@ function generatePlan(){
     </div>`;
   });
   h+='</div>';
+  // fréquences hors grille TNT (863–865, 2.4 GHz)
+  const offGrid=S.mics.map((m,i)=>({m,f:placed[i]})).filter(x=>x.f!=null&&!S.ch.some(c=>x.f>=c.freq_start&&x.f<c.freq_end));
+  if(offGrid.length) h+=`<div style="margin-top:10px;font-size:11px;color:var(--text2)">Hors bande TNT : ${offGrid.map(x=>`${x.m.name} <b>${x.f.toFixed(3)}</b>`).join(' · ')}</div>`;
   pr.innerHTML=h;
   document.getElementById('applyBtn').style.display='inline-flex';
 }
 
 function applyPlan(){
-  S.planSlots.forEach((sl,i)=>{if(S.mics[i]) S.mics[i].freq=sl.freq;});
-  computeIM(); renderAll(); setSt('Plan appliqué');
+  let n=0;
+  S.planSlots.forEach((sl,i)=>{if(S.mics[i]&&sl&&sl.freq!=null){S.mics[i].freq=sl.freq;n++;}});
+  computeIM(); renderAll(); setSt(`Plan appliqué — ${n} fréquence(s)`);
 }
 
 // ── RENDER ────────────────────────────────────────────────────────────
