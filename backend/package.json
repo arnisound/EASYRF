@@ -1,7 +1,7 @@
 {
-  "name": "easyrf-backend",
+  "name": "rfshot-backend",
   "version": "1.0.0",
-  "description": "Backend proxy ANFR pour EASYRF — coordinateur PMSE RF France",
+  "description": "Backend proxy ANFR pour RF SHOT — coordinateur PMSE RF France",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

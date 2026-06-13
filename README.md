@@ -1,4 +1,4 @@
-# EASYRF — Coordinateur PMSE RF France
+# RF SHOT — Coordinateur PMSE RF France
 
 ### 👉 [OUVRIR L'APPLICATION](https://arnisound.github.io/EASYRF/)
 

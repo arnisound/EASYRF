@@ -1,4 +1,4 @@
-// easyrf-relay.ts — Relais CORS (Deno Deploy) pour l'API Arcom « Ma couverture TNT »
+// rfshot-relay.ts — Relais CORS (Deno Deploy) pour l'API Arcom « Ma couverture TNT »
 // ====================================================================================
 // Petit proxy qui permet au navigateur d'interroger l'Arcom / l'ANFR, qui
 // n'autorisent pas les appels cross-origin. Il ajoute les bons en-têtes (dont
@@ -36,7 +36,7 @@ Deno.serve(async (req: Request) => {
 
   const reqUrl = new URL(req.url);
   if (reqUrl.pathname === "/" && !reqUrl.searchParams.has("url")) {
-    return new Response("EASYRF relay — OK", {
+    return new Response("RF SHOT relay — OK", {
       headers: { ...CORS, "Content-Type": "text/plain; charset=utf-8" },
     });
   }

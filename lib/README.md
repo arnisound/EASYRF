@@ -1,15 +1,15 @@
-# EASYRF — modules réutilisables
+# RF SHOT — modules réutilisables
 
-Modules ES autonomes (zéro dépendance, zéro DOM) extraits d'EASYRF, pour
+Modules ES autonomes (zéro dépendance, zéro DOM) extraits de RF SHOT, pour
 réutiliser dans un autre projet (artefact, app, script Node…) :
 
 | Fichier | Rôle |
 |---|---|
-| `easyrf-tnt.js` | **API données** — interroge l'API publique Arcom « Ma couverture TNT » et renvoie la grille des canaux UHF occupés/libres. |
-| `easyrf-scan.js` | **Import scans** — parse les exports CSV de scan de spectre (Shure WWB, Sennheiser WSM, RF Explorer, tinySA…) avec auto-détection du format. |
-| `easyrf-coordination.js` | **Algorithme** — calcule des plans de fréquences micros/IEM en évitant les intermodulations (IM). |
-| `easyrf-catalog.js` | **Base de données** — micros HF / IEM les plus utilisés en France (16 marques, 166 gammes), du haut de gamme au matériel d'entrée de gamme (the t.bone, LD Systems), avec leur espacement de coordination. |
-| `easyrf-relay.ts` | Relais CORS optionnel (Deno Deploy) si l'appel direct navigateur est bloqué. |
+| `rfshot-tnt.js` | **API données** — interroge l'API publique Arcom « Ma couverture TNT » et renvoie la grille des canaux UHF occupés/libres. |
+| `rfshot-scan.js` | **Import scans** — parse les exports CSV de scan de spectre (Shure WWB, Sennheiser WSM, RF Explorer, tinySA…) avec auto-détection du format. |
+| `rfshot-coordination.js` | **Algorithme** — calcule des plans de fréquences micros/IEM en évitant les intermodulations (IM). |
+| `rfshot-catalog.js` | **Base de données** — micros HF / IEM les plus utilisés en France (16 marques, 166 gammes), du haut de gamme au matériel d'entrée de gamme (the t.bone, LD Systems), avec leur espacement de coordination. |
+| `rfshot-relay.ts` | Relais CORS optionnel (Deno Deploy) si l'appel direct navigateur est bloqué. |
 
 Compatibles navigateur (ESM) et Node ≥ 18 (`fetch`/`AbortSignal.timeout` natifs).
 
@@ -18,7 +18,7 @@ Compatibles navigateur (ESM) et Node ≥ 18 (`fetch`/`AbortSignal.timeout` natif
 ## 1. Récupérer la couverture TNT
 
 ```js
-import { getTNT, applyExclusion, distKm } from './easyrf-tnt.js';
+import { getTNT, applyExclusion, distKm } from './rfshot-tnt.js';
 
 const { channels, source_label } = await getTNT(43.6105, 3.8705);
 // channels : [{ ch, freq_start, freq_end, occupied, pmse, mux, station,
@@ -33,13 +33,13 @@ const ignored = applyExclusion(channels, 43.6105, 3.8705, 60);
 - `opts.reverseGeocode` — résoudre le nom de commune via `api-adresse.data.gouv.fr` (défaut `true`).
 
 > ⚠️ Depuis un navigateur, l'appel direct à `matnt.arcom.fr` est souvent bloqué
-> par CORS. Déployez `easyrf-relay.ts` sur Deno Deploy et passez son URL via
+> par CORS. Déployez `rfshot-relay.ts` sur Deno Deploy et passez son URL via
 > `opts.relay`. En Node, l'appel direct fonctionne sans relais.
 
 ## 2. Coordonner les fréquences
 
 ```js
-import { generatePlan, assignFrequency, computeIM, imHitsPerCarrier } from './easyrf-coordination.js';
+import { generatePlan, assignFrequency, computeIM, imHitsPerCarrier } from './rfshot-coordination.js';
 
 const mics = [
   { name: 'HH 1', fmin: 470, fmax: 534, spacing: 350 }, // Shure ULX-D G51
@@ -80,7 +80,7 @@ const hits = imHitsPerCarrier(placed.filter(Boolean));
 
 ```js
 import { MIC_CATALOG, IEM_CATALOG, listBrands, listModels,
-         getModel, flatten, toMic } from './easyrf-catalog.js';
+         getModel, flatten, toMic } from './rfshot-catalog.js';
 
 listBrands();                       // ['Shure','Sennheiser','Sony', …] (16 marques)
 listModels('Shure');                // ['Axient Digital','ULX-D','QLX-D', …]
@@ -105,7 +105,7 @@ Sound Devices, Zaxcom, AKG, Mipro, beyerdynamic, the t.bone, LD Systems, Røde, 
 ## 4. Importer un scan de spectre
 
 ```js
-import { parseScan, binToChannels } from './easyrf-scan.js';
+import { parseScan, binToChannels } from './rfshot-scan.js';
 
 // CSV exporté par Shure Wireless Workbench, Sennheiser WSM, RF Explorer,
 // tinySA, Lectrosonics Wireless Designer, etc. — un seul parseur les couvre.

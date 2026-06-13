@@ -1,4 +1,4 @@
-// EASYRF — Relais TNT (Deno Deploy)
+// RF SHOT — Relais TNT (Deno Deploy)
 // =================================
 // Petit proxy qui permet au navigateur d'interroger l'ANFR (qui n'autorise
 // pas les appels cross-origin). Il ajoute les bons en-têtes et renvoie la
@@ -37,7 +37,7 @@ Deno.serve(async (req: Request) => {
   const reqUrl = new URL(req.url);
 
   if (reqUrl.pathname === "/" && !reqUrl.searchParams.has("url")) {
-    return new Response("EASYRF relay — OK", {
+    return new Response("RF SHOT relay — OK", {
       headers: { ...CORS, "Content-Type": "text/plain; charset=utf-8" },
     });
   }

@@ -1,5 +1,5 @@
 /**
- * EASYRF — Backend proxy TNT
+ * RF SHOT — Backend proxy TNT
  * ===========================
  * Récupère la couverture TNT réelle via la même API que le site officiel
  * scanfrequences.anfr.fr :
@@ -186,7 +186,7 @@ app.get('/api/tnt', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\nEASYRF Backend démarré sur http://localhost:${PORT}`);
+  console.log(`\nRF SHOT Backend démarré sur http://localhost:${PORT}`);
   console.log(`  GET /api/tnt?lat=43.63&lon=3.91`);
   console.log(`  GET /api/health\n`);
 });

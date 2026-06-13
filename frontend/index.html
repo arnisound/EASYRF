@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>EASYRF — Coordinateur PMSE RF France</title>
+<title>RF SHOT — Coordinateur PMSE RF France</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.4.0/dist/tabler-icons.min.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -104,7 +104,7 @@ tr:hover td{background:var(--bg2)}
 <body>
 
 <div class="header">
-  <div class="logo">EASY<span>RF</span></div>
+  <div class="logo">RF&nbsp;<span>SHOT</span></div>
   <div class="header-sub">Coordinateur PMSE · France · 470–694 & 822–838 MHz</div>
   <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
     <div class="backend-pill off" id="backendPill">
@@ -259,7 +259,7 @@ const S={lat:43.9493,lon:4.8055,ch:[],mics:[],im:[],show3:true,show5:false,onlyB
 const BACKEND='http://localhost:3001';
 
 // ── Import de scans de spectre RF (CSV multi-logiciels) ───────────────
-// Cf. lib/easyrf-scan.js. Parse les exports de Shure Wireless Workbench,
+// Cf. lib/rfshot-scan.js. Parse les exports de Shure Wireless Workbench,
 // Sennheiser WSM, RF Explorer, tinySA, etc. — tous convergent vers un CSV
 // (fréquence, amplitude dBm). Auto-détecte délimiteur, décimale, unité, en-tête.
 const SCAN_DELIMS=[';',',','\t','|',' '];
@@ -455,7 +455,7 @@ async function getTNT(lat,lon){
     throw new Error('Arcom a répondu « échec »'+(payload.message?' : '+payload.message:''));
   const channels=extractArcom(payload)||extractChannels(payload);
   if(!channels){
-    console.warn('EASYRF — réponse Arcom reçue mais non comprise :',payload);
+    console.warn('RF SHOT — réponse Arcom reçue mais non comprise :',payload);
     throw new Error('réponse Arcom reçue mais aucun canal UHF dedans — réponse brute affichée dans la console (F12)');
   }
   return {source:'arcom_live',source_label:'Arcom MaTNT'+(city?' — '+city:''),channels};
@@ -1391,11 +1391,11 @@ document.getElementById('fpAdd').onclick=()=>{
 
 // métadonnées du plan (titre, prestation, lieu…), persistées dans le navigateur
 const META_FIELDS=[['title','Titre'],['event','Prestation'],['place','Lieu'],['date','Date'],['coord','Coordinateur RF'],['contact','Contact coordinateur']];
-try{S.meta=JSON.parse(localStorage.getItem('easyrf_meta')||'{}');}catch(e){S.meta={};}
+try{S.meta=JSON.parse(localStorage.getItem('rfshot_meta')||'{}');}catch(e){S.meta={};}
 META_FIELDS.forEach(([k])=>{
   const el=document.getElementById('fp_'+k);
   el.value=S.meta[k]||'';
-  el.oninput=()=>{S.meta[k]=el.value;try{localStorage.setItem('easyrf_meta',JSON.stringify(S.meta));}catch(e){}};
+  el.oninput=()=>{S.meta[k]=el.value;try{localStorage.setItem('rfshot_meta',JSON.stringify(S.meta));}catch(e){}};
 });
 
 function exportPlanCsv(){
@@ -1410,7 +1410,7 @@ function exportPlanCsv(){
   const b=new Blob([rows.join('\n')],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a');a.href=URL.createObjectURL(b);
   const slug=(S.meta.title||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
-  a.download=(slug||'easyrf_plan')+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  a.download=(slug||'rfshot_plan')+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
 }
 document.getElementById('csvBtn').onclick=exportPlanCsv;
 document.getElementById('fpCsv').onclick=exportPlanCsv;
