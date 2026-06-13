@@ -208,7 +208,7 @@ tr:hover td{background:var(--bg2)}
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       <strong>Plan fréquences automatique</strong>
       <span style="font-size:11px;color:var(--text2)">Les produits IM sont dirigés vers les canaux TV occupés.</span>
-      <button class="btn btn-purple" id="genBtn"><i class="ti ti-wand"></i> Générer</button>
+      <button class="btn btn-purple" id="genBtn" title="Garantit zéro IM 2 tons (2fA−fB, 3fA−2fB) sur chaque porteuse et dirige les IM vers les canaux TV occupés (sinon vers quelques canaux libres sacrifiés). Les IM 3 sources sont minimisées. Place tous les micros, jusqu'à 50."><i class="ti ti-wand"></i> Génération standard</button>
       <button class="btn btn-purple" id="advBtn" title="Mode strict : aucune IM 3 sources (fA+fB−fC) tolérée sur les porteuses, et minimisation des IM5 à 3 sources. Plus exigeant : peut ne pas placer tous les micros sur les gros plans."><i class="ti ti-sparkles"></i> Génération avancée</button>
       <button class="btn btn-xs" id="regenBtn" style="display:none" title="Propose un autre plan équivalent (tirage différent)"><i class="ti ti-refresh"></i> Régénérer</button>
       <button class="btn btn-xs btn-green" id="applyBtn" style="display:none"><i class="ti ti-check"></i> Appliquer aux micros</button>
