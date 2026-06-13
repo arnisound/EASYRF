@@ -127,8 +127,6 @@ tr:hover td{background:var(--bg2)}
     <input type="number" id="lon" value="4.8055"  step="0.0001" style="width:84px">
     <button class="btn" id="geoBtn"><i class="ti ti-current-location"></i> Géolocaliser</button>
     <button class="btn btn-blue" id="scanBtn"><i class="ti ti-broadcast"></i> Analyser TNT</button>
-    <button class="btn" id="impBtn" title="Importer un scan de spectre (CSV) exporté depuis Shure Wireless Workbench, Sennheiser WSM, RF Explorer, tinySA, etc."><i class="ti ti-file-upload"></i> Importer scan</button>
-    <input type="file" id="impFile" accept=".csv,.txt,text/csv,text/plain" hidden>
     <select id="exclKm" title="Ignorer les émetteurs TNT au-delà de cette distance : leurs canaux redeviennent utilisables" style="max-width:150px">
       <option value="0">Émetteurs : tous</option>
       <option value="30">Émetteurs ≤ 30 km</option>
@@ -192,6 +190,12 @@ tr:hover td{background:var(--bg2)}
 <!-- SPECTRUM -->
 <div class="pane" id="pane-spectrum">
   <div class="spec-pad">
+    <div class="spec-bar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn btn-xs" id="impBtn" title="Importer un scan de spectre (CSV) exporté depuis Shure Wireless Workbench, Sennheiser WSM, RF Explorer, tinySA, etc."><i class="ti ti-file-upload"></i> Importer un scan</button>
+      <input type="file" id="impFile" accept=".csv,.txt,text/csv,text/plain" hidden>
+      <span id="scanInfo" style="font-size:11px;color:var(--text2)">Aucun scan importé — formats CSV : Shure WWB, Sennheiser WSM, RF Explorer, tinySA…</span>
+      <button class="btn btn-xs" id="scanClear" style="display:none;border-color:var(--red);color:var(--red)"><i class="ti ti-x"></i> Retirer</button>
+    </div>
     <canvas id="cv" height="180" aria-label="Spectre UHF 470–694 MHz"></canvas>
     <div class="leg">
       <div class="leg-i"><div class="leg-b" style="background:rgba(163,45,45,.2);border:1px solid #A32D2D"></div>Canal TNT occupé</div>
@@ -514,7 +518,25 @@ document.getElementById('scanBtn').onclick=async()=>{
 };
 
 // ── IMPORT SCAN DE SPECTRE ───────────────────────────────────────────
+function renderScanInfo(){
+  const info=document.getElementById('scanInfo'),clr=document.getElementById('scanClear');
+  if(!info)return;
+  if(!S.scan){
+    info.style.color='var(--text2)';
+    info.textContent='Aucun scan importé — formats CSV : Shure WWB, Sennheiser WSM, RF Explorer, tinySA…';
+    if(clr)clr.style.display='none';
+    return;
+  }
+  const m=S.scan.meta,unitTxt=m.delimiter==='\t'?'tab':m.delimiter;
+  info.style.color='var(--text)';
+  info.innerHTML=`<strong>${S.scan.name}</strong> — ${m.count} pts · ${m.fmin.toFixed(1)}–${m.fmax.toFixed(1)} MHz · `
+    +`plancher ${m.dbMin.toFixed(0)} / crête ${m.dbMax.toFixed(0)} dBm `
+    +`<span style="color:var(--text3)">(délim. « ${unitTxt} », ${m.unit})</span>`
+    +(S.scan.warnings&&S.scan.warnings.length?` <span style="color:var(--red)">⚠ ${S.scan.warnings.join(' ')}</span>`:'');
+  if(clr)clr.style.display='';
+}
 document.getElementById('impBtn').onclick=()=>document.getElementById('impFile').click();
+document.getElementById('scanClear').onclick=()=>{S.scan=null;renderScanInfo();drawSpec();setSt('Scan retiré.');};
 document.getElementById('impFile').onchange=(ev)=>{
   const file=ev.target.files&&ev.target.files[0];
   if(!file)return;
@@ -522,15 +544,15 @@ document.getElementById('impFile').onchange=(ev)=>{
   rd.onload=()=>{
     try{
       const {points,meta,warnings}=parseScan(String(rd.result));
-      if(!points.length){setSt('Scan « '+file.name+' » : '+(warnings[0]||'aucune donnée reconnue'));return;}
-      S.scan={name:file.name,points,meta};
-      const unitTxt={Hz:'Hz',kHz:'kHz',MHz:'MHz'}[meta.unit]||meta.unit;
-      let msg=`✓ Scan « ${file.name} » — ${meta.count} points, ${meta.fmin.toFixed(1)}–${meta.fmax.toFixed(1)} MHz, `
-            +`plancher ${meta.dbMin.toFixed(0)} / crête ${meta.dbMax.toFixed(0)} dBm `
-            +`(détecté : délim. « ${meta.delimiter==='\t'?'tab':meta.delimiter} », ${unitTxt})`;
-      if(warnings.length)msg+=' ⚠ '+warnings.join(' ');
-      setSt(msg);
-      showTab('spectrum'); drawSpec();
+      if(!points.length){
+        S.scan=null;renderScanInfo();drawSpec();
+        setSt('Scan « '+file.name+' » : '+(warnings[0]||'aucune donnée reconnue'));
+        return;
+      }
+      S.scan={name:file.name,points,meta,warnings};
+      renderScanInfo();
+      drawSpec();
+      setSt(`✓ Scan « ${file.name} » importé — ${meta.count} points superposés au spectre.`);
     }catch(e){setSt('Erreur lecture scan : '+e.message);}
   };
   rd.onerror=()=>setSt('Impossible de lire le fichier.');
