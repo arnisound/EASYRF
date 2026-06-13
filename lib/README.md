@@ -7,6 +7,7 @@ réutiliser dans un autre projet (artefact, app, script Node…) :
 |---|---|
 | `easyrf-tnt.js` | **API données** — interroge l'API publique Arcom « Ma couverture TNT » et renvoie la grille des canaux UHF occupés/libres. |
 | `easyrf-coordination.js` | **Algorithme** — calcule des plans de fréquences micros/IEM en évitant les intermodulations (IM). |
+| `easyrf-catalog.js` | **Base de données** — micros HF / IEM les plus utilisés en France (15 marques, 110 gammes) avec leur espacement de coordination. |
 | `easyrf-relay.ts` | Relais CORS optionnel (Deno Deploy) si l'appel direct navigateur est bloqué. |
 
 Compatibles navigateur (ESM) et Node ≥ 18 (`fetch`/`AbortSignal.timeout` natifs).
@@ -73,6 +74,32 @@ Audit des intermodulations d'un plan fini :
 const hits = imHitsPerCarrier(placed.filter(Boolean));
 // [{ idx, freq, im2:[...], im3:[...] }, ...]  im2 = produits critiques
 ```
+
+## 3. Base de données micros / IEM
+
+```js
+import { MIC_CATALOG, IEM_CATALOG, listBrands, listModels,
+         getModel, flatten, toMic } from './easyrf-catalog.js';
+
+listBrands();                       // ['Shure','Sennheiser','Sony', …] (15 marques)
+listModels('Shure');                // ['Axient Digital','ULX-D','QLX-D', …]
+getModel('Shure', 'ULX-D');         // { sp:350, b:[['G51',470,534], …] }
+
+// Construire un micro prêt pour generatePlan() : marque, modèle, index de gamme
+const mic = toMic('Shure', 'ULX-D', 0, { name: 'HH 1' });
+// → { brand:'Shure', model:'ULX-D', band:'G51', fmin:470, fmax:534, spacing:350, name:'HH 1' }
+
+// Toutes les gammes à plat (110 entrées)
+flatten(MIC_CATALOG);  // [{ brand, model, band, fmin, fmax, spacing }, …]
+flatten(IEM_CATALOG);  // idem pour les retours in-ear
+```
+
+Structure brute : `marque → modèle → { sp:<espacement kHz>, b:[[libellé, fmin, fmax], …] }`.
+Marques incluses : Shure, Sennheiser, Sony, Audio-Technica, Wisycom, Lectrosonics,
+Sound Devices, Zaxcom, AKG, Mipro, beyerdynamic, the t.bone, Røde, DJI.
+
+> Les gammes sont indicatives (déclinaisons EU courantes) ; vérifiez la bande
+> exacte de votre matériel avant exploitation.
 
 ---
 
