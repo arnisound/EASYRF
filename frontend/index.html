@@ -226,6 +226,14 @@ tr:hover td{background:var(--bg2)}
       <button class="btn btn-xs" id="fpAdd"><i class="ti ti-plus"></i> Ajouter une ligne</button>
       <button class="btn btn-xs" id="fpCsv" style="margin-left:auto"><i class="ti ti-download"></i> Exporter CSV</button>
     </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px 10px;margin-bottom:14px;max-width:1100px">
+      <label style="font-size:10px;color:var(--text2);display:flex;flex-direction:column;gap:3px">Titre du plan<input id="fp_title" type="text" placeholder="Plan HF — Festival XY"></label>
+      <label style="font-size:10px;color:var(--text2);display:flex;flex-direction:column;gap:3px">Prestation<input id="fp_event" type="text" placeholder="Concert, théâtre, conférence…"></label>
+      <label style="font-size:10px;color:var(--text2);display:flex;flex-direction:column;gap:3px">Lieu<input id="fp_place" type="text" placeholder="Salle, ville"></label>
+      <label style="font-size:10px;color:var(--text2);display:flex;flex-direction:column;gap:3px">Date<input id="fp_date" type="date"></label>
+      <label style="font-size:10px;color:var(--text2);display:flex;flex-direction:column;gap:3px">Coordinateur RF<input id="fp_coord" type="text" placeholder="Nom Prénom"></label>
+      <label style="font-size:10px;color:var(--text2);display:flex;flex-direction:column;gap:3px">Contact coordinateur<input id="fp_contact" type="text" placeholder="Téléphone / e-mail"></label>
+    </div>
     <div class="tbl-sc" id="fplanWrap"></div>
   </div>
 </div>
@@ -1262,12 +1270,28 @@ document.getElementById('fpAdd').onclick=()=>{
   computeIM(); renderAll();
 };
 
+// métadonnées du plan (titre, prestation, lieu…), persistées dans le navigateur
+const META_FIELDS=[['title','Titre'],['event','Prestation'],['place','Lieu'],['date','Date'],['coord','Coordinateur RF'],['contact','Contact coordinateur']];
+try{S.meta=JSON.parse(localStorage.getItem('easyrf_meta')||'{}');}catch(e){S.meta={};}
+META_FIELDS.forEach(([k])=>{
+  const el=document.getElementById('fp_'+k);
+  el.value=S.meta[k]||'';
+  el.oninput=()=>{S.meta[k]=el.value;try{localStorage.setItem('easyrf_meta',JSON.stringify(S.meta));}catch(e){}};
+});
+
 function exportPlanCsv(){
-  const rows=['Nom,Marque,Modèle,Gamme,Fréquence (MHz),Plage min,Plage max,Espacement (kHz),Conflit TNT,IM 2 tons,IM 3 tons'];
-  S.mics.forEach(m=>rows.push(`"${(m.name||'').replace(/"/g,'""')}",${m.brand||''},${m.model||''},${m.band||''},${m.freq},${m.fmin},${m.fmax},${m.spacing||m.bw},${m.tntConflict?'OUI':'non'},${m.imHits?m.imHits.length:0},${m.imHits3?m.imHits3.length:0}`));
+  const q=v=>'"'+String(v||'').replace(/"/g,'""')+'"';
+  const rows=[];
+  META_FIELDS.forEach(([k,lbl])=>{if(S.meta[k])rows.push(lbl+','+q(S.meta[k]));});
+  rows.push('Position GPS,'+q(S.lat+', '+S.lon));
+  rows.push('Exporté le,'+q(new Date().toLocaleString('fr-FR')));
+  rows.push('');
+  rows.push('Nom,Marque,Modèle,Gamme,Fréquence (MHz),Plage min,Plage max,Espacement (kHz),Conflit TNT,IM 2 tons,IM 3 tons');
+  S.mics.forEach(m=>rows.push(`${q(m.name)},${m.brand||''},${m.model||''},${m.band||''},${m.freq},${m.fmin},${m.fmax},${m.spacing||m.bw},${m.tntConflict?'OUI':'non'},${m.imHits?m.imHits.length:0},${m.imHits3?m.imHits3.length:0}`));
   const b=new Blob([rows.join('\n')],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a');a.href=URL.createObjectURL(b);
-  a.download='easyrf_plan_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  const slug=(S.meta.title||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+  a.download=(slug||'easyrf_plan')+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
 }
 document.getElementById('csvBtn').onclick=exportPlanCsv;
 document.getElementById('fpCsv').onclick=exportPlanCsv;
