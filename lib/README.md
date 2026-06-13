@@ -1,11 +1,12 @@
 # EASYRF — modules réutilisables
 
-Deux modules ES autonomes (zéro dépendance, zéro DOM) extraits d'EASYRF, pour
+Modules ES autonomes (zéro dépendance, zéro DOM) extraits d'EASYRF, pour
 réutiliser dans un autre projet (artefact, app, script Node…) :
 
 | Fichier | Rôle |
 |---|---|
 | `easyrf-tnt.js` | **API données** — interroge l'API publique Arcom « Ma couverture TNT » et renvoie la grille des canaux UHF occupés/libres. |
+| `easyrf-scan.js` | **Import scans** — parse les exports CSV de scan de spectre (Shure WWB, Sennheiser WSM, RF Explorer, tinySA…) avec auto-détection du format. |
 | `easyrf-coordination.js` | **Algorithme** — calcule des plans de fréquences micros/IEM en évitant les intermodulations (IM). |
 | `easyrf-catalog.js` | **Base de données** — micros HF / IEM les plus utilisés en France (16 marques, 166 gammes), du haut de gamme au matériel d'entrée de gamme (the t.bone, LD Systems), avec leur espacement de coordination. |
 | `easyrf-relay.ts` | Relais CORS optionnel (Deno Deploy) si l'appel direct navigateur est bloqué. |
@@ -100,6 +101,27 @@ Sound Devices, Zaxcom, AKG, Mipro, beyerdynamic, the t.bone, LD Systems, Røde, 
 
 > Les gammes sont indicatives (déclinaisons EU courantes) ; vérifiez la bande
 > exacte de votre matériel avant exploitation.
+
+## 4. Importer un scan de spectre
+
+```js
+import { parseScan, binToChannels } from './easyrf-scan.js';
+
+// CSV exporté par Shure Wireless Workbench, Sennheiser WSM, RF Explorer,
+// tinySA, Lectrosonics Wireless Designer, etc. — un seul parseur les couvre.
+const { points, meta, warnings } = parseScan(await file.text());
+// points : [{ f, db }, …]  f en MHz, db en dBm, trié par fréquence
+// meta   : { delimiter, decimal, unit, swapped, count, fmin, fmax, dbMin, dbMax, … }
+
+// Reporter le niveau mesuré sur la grille TNT (champs scan_dbm / scan_occupied)
+const { occupied } = binToChannels(points, channels, { threshold: -85 });
+```
+
+`parseScan()` auto-détecte le **délimiteur** (`,` `;` tab `|` espace), le **séparateur
+décimal** (`.`/`,`), l'**unité** (Hz/kHz/MHz), l'ordre des colonnes et saute le
+préambule/en-tête. Forçage possible : `parseScan(text, { delimiter, decimal, unit })`.
+Formats couverts : tous ceux qui exportent un CSV `(fréquence, amplitude dBm)`
+— soit la quasi-totalité des logiciels constructeur et analyseurs de spectre.
 
 ---
 

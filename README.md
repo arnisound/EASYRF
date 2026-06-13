@@ -54,6 +54,7 @@ Source des données : Arcom (ex-CSA) « Ma couverture TNT », via l'ANFR.
 
 - **Géolocalisation** GPS ou saisie manuelle de coordonnées
 - **Données TNT** : canaux UHF C21–C48 (470–694 MHz) depuis l'ANFR
+- **Import de scans** : CSV de scan de spectre depuis Shure Wireless Workbench, Sennheiser WSM, RF Explorer, tinySA… (auto-détection du format)
 - **50+ modèles** de micros sans fil, du haut de gamme à l'entrée de gamme : Shure, Sennheiser, Sony, Audio-Technica, Wisycom, Lectrosonics, AKG, Mipro, beyerdynamic, the t.bone, LD Systems, Røde, DJI + retours IEM
 - **Calcul IM3 + IM5** : produits d'intermodulation ordres 3 et 5 (paires et triplets)
 - **Plan automatique** : placement optimal des porteuses avec les IM3/IM5 dirigés dans les canaux TV occupés ("poubelle")

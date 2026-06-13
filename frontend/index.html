@@ -127,6 +127,8 @@ tr:hover td{background:var(--bg2)}
     <input type="number" id="lon" value="4.8055"  step="0.0001" style="width:84px">
     <button class="btn" id="geoBtn"><i class="ti ti-current-location"></i> Géolocaliser</button>
     <button class="btn btn-blue" id="scanBtn"><i class="ti ti-broadcast"></i> Analyser TNT</button>
+    <button class="btn" id="impBtn" title="Importer un scan de spectre (CSV) exporté depuis Shure Wireless Workbench, Sennheiser WSM, RF Explorer, tinySA, etc."><i class="ti ti-file-upload"></i> Importer scan</button>
+    <input type="file" id="impFile" accept=".csv,.txt,text/csv,text/plain" hidden>
     <select id="exclKm" title="Ignorer les émetteurs TNT au-delà de cette distance : leurs canaux redeviennent utilisables" style="max-width:150px">
       <option value="0">Émetteurs : tous</option>
       <option value="30">Émetteurs ≤ 30 km</option>
@@ -198,6 +200,7 @@ tr:hover td{background:var(--bg2)}
       <div class="leg-i"><div class="leg-b" style="background:#185FA520"></div>BW micro</div>
       <div class="leg-i" id="li3"><div class="leg-b" style="background:#854F0B99"></div>IM3</div>
       <div class="leg-i" id="li5" style="display:none"><div class="leg-b" style="background:#BA751766"></div>IM5</div>
+      <div class="leg-i"><div class="leg-b" style="background:#185FA5;height:2px;align-self:center"></div>Scan mesuré (importé)</div>
     </div>
   </div>
 </div>
@@ -248,8 +251,51 @@ tr:hover td{background:var(--bg2)}
 
 <script>
 const MC=['#185FA5','#993556','#3B6D11','#854F0B','#534AB7','#0F6E56','#D85A30','#0C447C'];
-const S={lat:43.9493,lon:4.8055,ch:[],mics:[],im:[],show3:true,show5:false,onlyB:true,_fmin:470,_fmax:694,_bw:200,planSlots:[]};
+const S={lat:43.9493,lon:4.8055,ch:[],mics:[],im:[],show3:true,show5:false,onlyB:true,_fmin:470,_fmax:694,_bw:200,planSlots:[],scan:null};
 const BACKEND='http://localhost:3001';
+
+// ── Import de scans de spectre RF (CSV multi-logiciels) ───────────────
+// Cf. lib/easyrf-scan.js. Parse les exports de Shure Wireless Workbench,
+// Sennheiser WSM, RF Explorer, tinySA, etc. — tous convergent vers un CSV
+// (fréquence, amplitude dBm). Auto-détecte délimiteur, décimale, unité, en-tête.
+const SCAN_DELIMS=[';',',','\t','|',' '];
+function scanSplit(line,d){return d===' '?line.trim().split(/\s+/):line.split(d);}
+function scanNumFn(dec){return dec===','
+  ?(t=>{const s=t.trim();return /^[+-]?\d+(,\d+)?$/.test(s)?parseFloat(s.replace(',','.')):NaN;})
+  :(t=>{const s=t.trim();return /^[+-]?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(s)?parseFloat(s):NaN;});}
+function scanRowNums(line,d,num){const out=[];for(const t of scanSplit(line,d)){const v=num(t);if(!isNaN(v)){out.push(v);if(out.length>=2)break;}}return out;}
+function scanDetect(lines){const sample=lines.slice(0,Math.min(lines.length,120));let best={delim:',',decimal:'.',score:-1};
+  for(const delim of SCAN_DELIMS)for(const decimal of(delim===','?['.']:['.',','])){const num=scanNumFn(decimal);let score=0;
+    for(const ln of sample)if(scanRowNums(ln,delim,num).length>=2)score++;
+    if(score>best.score)best={delim,decimal,score};}return best;}
+function scanMedian(a){if(!a.length)return 0;const s=[...a].sort((x,y)=>x-y),m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2;}
+function scanMedAbs(a){return scanMedian(a.map(Math.abs));}
+function parseScan(text,opts={}){
+  if(typeof text!=='string')throw new TypeError('parseScan: texte CSV attendu');
+  const warnings=[];
+  const lines=text.replace(/^﻿/,'').split(/\r\n|\r|\n/).filter(l=>l.trim()!=='');
+  if(!lines.length){warnings.push('Fichier vide.');return{points:[],meta:{count:0},warnings};}
+  const fmt=opts.delimiter?{delim:opts.delimiter,decimal:opts.decimal||'.',score:lines.length}:scanDetect(lines);
+  const num=scanNumFn(fmt.decimal);
+  const raw=[];let skipped=0;
+  for(const ln of lines){const n=scanRowNums(ln,fmt.delim,num);if(n.length>=2)raw.push(n);else skipped++;}
+  if(!raw.length){warnings.push('Aucune ligne de données numériques reconnue (format non supporté ?).');return{points:[],meta:{count:0},warnings};}
+  const c0=raw.map(r=>r[0]),c1=raw.map(r=>r[1]);
+  const swapped=scanMedAbs(c1)>scanMedAbs(c0);
+  const freqRaw=swapped?c1:c0,ampRaw=swapped?c0:c1;
+  const medF=scanMedAbs(freqRaw);
+  let unit=opts.unit||(medF>=1e7?'Hz':medF>=1e4?'kHz':'MHz');
+  const div=unit==='Hz'?1e6:unit==='kHz'?1e3:1;
+  const points=freqRaw.map((f,i)=>({f:f/div,db:ampRaw[i]})).sort((a,b)=>a.f-b.f);
+  const dbs=points.map(p=>p.db),fmin=points[0].f,fmax=points[points.length-1].f;
+  const dbMin=Math.min(...dbs),dbMax=Math.max(...dbs);
+  const confidence=Math.min(1,fmt.score/Math.max(1,lines.length));
+  if(points.length<10)warnings.push(`Scan très court (${points.length} points).`);
+  if(dbMax>30)warnings.push("Amplitudes positives élevées : niveaux en dBµV plutôt qu'en dBm ?");
+  if(fmin<1||fmax>6000)warnings.push(`Fréquences hors plage attendue (${fmin.toFixed(1)}–${fmax.toFixed(1)} MHz).`);
+  if(confidence<0.5)warnings.push('Format ambigu : vérifiez le résultat.');
+  return{points,meta:{delimiter:fmt.delim,decimal:fmt.decimal,unit,swapped,rows:lines.length,used:points.length,skipped,fmin,fmax,dbMin,dbMax,count:points.length,confidence},warnings};
+}
 
 // ── Couche données TNT ────────────────────────────────────────────────
 // Stratégie : appel direct aux API depuis le navigateur (fonctionne en
@@ -465,6 +511,31 @@ document.getElementById('scanBtn').onclick=async()=>{
     computeIM(); renderAll();
   }catch(e){setSt('Erreur: '+e.message);}
   finally{document.getElementById('scanBtn').disabled=false;}
+};
+
+// ── IMPORT SCAN DE SPECTRE ───────────────────────────────────────────
+document.getElementById('impBtn').onclick=()=>document.getElementById('impFile').click();
+document.getElementById('impFile').onchange=(ev)=>{
+  const file=ev.target.files&&ev.target.files[0];
+  if(!file)return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const {points,meta,warnings}=parseScan(String(rd.result));
+      if(!points.length){setSt('Scan « '+file.name+' » : '+(warnings[0]||'aucune donnée reconnue'));return;}
+      S.scan={name:file.name,points,meta};
+      const unitTxt={Hz:'Hz',kHz:'kHz',MHz:'MHz'}[meta.unit]||meta.unit;
+      let msg=`✓ Scan « ${file.name} » — ${meta.count} points, ${meta.fmin.toFixed(1)}–${meta.fmax.toFixed(1)} MHz, `
+            +`plancher ${meta.dbMin.toFixed(0)} / crête ${meta.dbMax.toFixed(0)} dBm `
+            +`(détecté : délim. « ${meta.delimiter==='\t'?'tab':meta.delimiter} », ${unitTxt})`;
+      if(warnings.length)msg+=' ⚠ '+warnings.join(' ');
+      setSt(msg);
+      showTab('spectrum'); drawSpec();
+    }catch(e){setSt('Erreur lecture scan : '+e.message);}
+  };
+  rd.onerror=()=>setSt('Impossible de lire le fichier.');
+  rd.readAsText(file);
+  ev.target.value=''; // permet de réimporter le même fichier
 };
 
 // ── EXCLUSION D'ÉMETTEURS PAR DISTANCE ───────────────────────────────
@@ -1182,6 +1253,18 @@ function drawSpec(){
     ctx.font='bold 9px sans-serif';ctx.textAlign='center';ctx.fillStyle=m.color;
     ctx.fillText('M'+(i+1),xc,stripH+8);
   });
+
+  // scan de spectre importé (courbe mesurée, mise à l'échelle sur ses propres niveaux)
+  if(S.scan&&S.scan.points.length){
+    const pts=S.scan.points,sm=S.scan.meta;
+    const top=Math.max(sm.dbMax,-20)+3,bot=Math.min(sm.dbMin,-100)-3,rng=Math.max(1,top-bot);
+    const y0=stripH+4,y1=BH-2;
+    const yfor=db=>{let t=(db-bot)/rng;t=t<0?0:t>1?1:t;return y1-t*(y1-y0);};
+    ctx.strokeStyle=dark?'rgba(94,164,255,.9)':'rgba(24,95,165,.85)';
+    ctx.lineWidth=1;ctx.beginPath();let started=false;
+    for(const p of pts){const x=fx(p.f);if(x<-5||x>W+5){started=false;continue;}const y=yfor(p.db);if(started)ctx.lineTo(x,y);else{ctx.moveTo(x,y);started=true;}}
+    ctx.stroke();
+  }
 
   // graduations adaptées au niveau de zoom
   ctx.fillStyle=dark?'rgba(255,255,255,.4)':'rgba(0,0,0,.4)';
