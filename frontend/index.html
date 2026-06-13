@@ -73,7 +73,7 @@ tr:hover td{background:var(--bg2)}
 
 /* SPECTRUM */
 .spec-pad{padding:16px}
-#cv{display:block;width:100%;border-radius:var(--radius);border:0.5px solid var(--border)}
+#cv{display:block;width:100%;border-radius:var(--radius);border:0.5px solid var(--border);touch-action:none}
 .leg{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--text2)}
 .leg-i{display:flex;align-items:center;gap:5px}
 .leg-b{width:12px;height:10px;border-radius:2px;flex-shrink:0}
@@ -196,7 +196,7 @@ tr:hover td{background:var(--bg2)}
       <span id="scanInfo" style="font-size:11px;color:var(--text2)">Aucun scan importé — formats CSV : Shure WWB, Sennheiser WSM, RF Explorer, tinySA…</span>
       <button class="btn btn-xs" id="scanClear" style="display:none;border-color:var(--red);color:var(--red)"><i class="ti ti-x"></i> Retirer</button>
     </div>
-    <canvas id="cv" height="180" aria-label="Spectre UHF 470–694 MHz"></canvas>
+    <canvas id="cv" height="230" aria-label="Spectre UHF 470–694 MHz"></canvas>
     <div class="leg">
       <div class="leg-i"><div class="leg-b" style="background:rgba(163,45,45,.2);border:1px solid #A32D2D"></div>Canal TNT occupé</div>
       <div class="leg-i"><div class="leg-b" style="background:rgba(59,109,17,.15);border:1px solid #3B6D11"></div>Canal libre</div>
@@ -1185,7 +1185,7 @@ function drawSpec(){
   const cv=document.getElementById('cv');
   if(!cv||!cv.parentElement)return;
   const ctx=cv.getContext('2d');
-  const W=cv.parentElement.offsetWidth-32||640,H=180;
+  const W=cv.parentElement.offsetWidth-32||640,H=230;
   const D=window.devicePixelRatio||1;
   cv.width=W*D;cv.height=H*D;cv.style.width=W+'px';cv.style.height=H+'px';
   ctx.scale(D,D);
@@ -1233,10 +1233,11 @@ function drawSpec(){
     ctx.fillRect(x1,0,w,BH);
     ctx.strokeStyle=c.occupied?'#A32D2D':'#639922';
     ctx.lineWidth=.5;ctx.strokeRect(x1,.5,w,BH-1);
-    if(w>14){
+    if(w>12){
       ctx.fillStyle=c.occupied?'#A32D2D':'#3B6D11';
-      ctx.font=`${Math.min(10,w/3.5)}px sans-serif`;ctx.textAlign='center';
-      ctx.fillText('C'+c.ch,x1+w/2,BH/2+4);
+      const fs=Math.min(14,Math.max(9,w/2.6));
+      ctx.font=`600 ${fs}px sans-serif`;ctx.textAlign='center';
+      ctx.fillText('C'+c.ch,x1+w/2,BH/2+fs/3);
     }
   });
 
@@ -1272,8 +1273,8 @@ function drawSpec(){
     const bwPx=Math.abs(fx(m.freq+m.bw/2000)-xc);
     ctx.fillStyle=m.color+'22';ctx.fillRect(xc-bwPx,0,bwPx*2,BH);
     ctx.fillStyle=m.color;ctx.fillRect(xc-1.5,0,3,BH);
-    ctx.font='bold 9px sans-serif';ctx.textAlign='center';ctx.fillStyle=m.color;
-    ctx.fillText('M'+(i+1),xc,stripH+8);
+    ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.fillStyle=m.color;
+    ctx.fillText('M'+(i+1),xc,stripH+9);
   });
 
   // scan de spectre importé (courbe mesurée, mise à l'échelle sur ses propres niveaux)
@@ -1282,27 +1283,32 @@ function drawSpec(){
     const top=Math.max(sm.dbMax,-20)+3,bot=Math.min(sm.dbMin,-100)-3,rng=Math.max(1,top-bot);
     const y0=stripH+4,y1=BH-2;
     const yfor=db=>{let t=(db-bot)/rng;t=t<0?0:t>1?1:t;return y1-t*(y1-y0);};
-    ctx.strokeStyle=dark?'rgba(94,164,255,.9)':'rgba(24,95,165,.85)';
-    ctx.lineWidth=1;ctx.beginPath();let started=false;
+    ctx.strokeStyle=dark?'rgba(94,164,255,.95)':'rgba(24,95,165,.9)';
+    ctx.lineWidth=1.6;ctx.beginPath();let started=false;
     for(const p of pts){const x=fx(p.f);if(x<-5||x>W+5){started=false;continue;}const y=yfor(p.db);if(started)ctx.lineTo(x,y);else{ctx.moveTo(x,y);started=true;}}
     ctx.stroke();
   }
 
   // graduations adaptées au niveau de zoom
-  ctx.fillStyle=dark?'rgba(255,255,255,.4)':'rgba(0,0,0,.4)';
-  ctx.font='9px sans-serif';ctx.textAlign='center';
+  ctx.fillStyle=dark?'rgba(255,255,255,.6)':'rgba(0,0,0,.55)';
+  ctx.font='11px sans-serif';ctx.textAlign='center';
   const step=span>180?10:span>90?5:span>40?2:1;
   SPEC_SEGS.filter(g=>!g.gap).forEach(g=>{
     for(let f=Math.ceil(g.a/step)*step;f<=g.b;f+=step){
-      const x=fx(f);if(x<10||x>W-10)continue;
-      ctx.fillText(f,x,H-5);
+      const x=fx(f);if(x<12||x>W-12)continue;
+      ctx.fillText(f,x,H-6);
     }
   });
-  ctx.textAlign='left';ctx.fillText('MHz',2,H-5);
-  // aide navigation
+  ctx.textAlign='left';ctx.fillText('MHz',2,H-6);
+  // aide navigation (adaptée au support : souris ou tactile)
   ctx.textAlign='right';
-  ctx.fillStyle=dark?'rgba(255,255,255,.25)':'rgba(0,0,0,.25)';
-  ctx.fillText(span<SPEC_U-1?'double-clic : vue complète':'molette : zoom · glisser : déplacer',W-4,10);
+  ctx.font='10px sans-serif';
+  ctx.fillStyle=dark?'rgba(255,255,255,.38)':'rgba(0,0,0,.4)';
+  const touch=('ontouchstart'in window)||navigator.maxTouchPoints>0;
+  const hint=span<SPEC_U-1
+    ?(touch?'double-tap : vue complète':'double-clic : vue complète')
+    :(touch?'pincer : zoom · glisser : déplacer':'molette : zoom · glisser');
+  ctx.fillText(hint,W-4,12);
 }
 
 // interactions zoom / déplacement (attachées une seule fois)
@@ -1332,6 +1338,42 @@ function drawSpec(){
   });
   window.addEventListener('mouseup',()=>{if(drag){drag=null;cv.style.cursor='grab';}});
   cv.addEventListener('dblclick',()=>{specU0=0;specU1=SPEC_U;drawSpec();});
+
+  // ── Tactile : glisser (1 doigt) · pincer (2 doigts) · double-tap (reset) ──
+  let tdrag=null,pinch=null,lastTap=0;
+  const fracX=cx=>{const r=cv.getBoundingClientRect();return (cx-r.left)/r.width;};
+  cv.addEventListener('touchstart',e=>{
+    if(e.touches.length===2){
+      tdrag=null;
+      const a=e.touches[0],b=e.touches[1];
+      pinch={d0:Math.abs(b.clientX-a.clientX)||1,span0:specU1-specU0,u0:specU0,cf:(fracX(a.clientX)+fracX(b.clientX))/2};
+    }else if(e.touches.length===1){
+      const now=Date.now();
+      if(now-lastTap<300){specU0=0;specU1=SPEC_U;drawSpec();lastTap=0;e.preventDefault();return;}
+      lastTap=now;pinch=null;
+      tdrag={x:e.touches[0].clientX,u0:specU0,u1:specU1};
+    }
+    e.preventDefault();
+  },{passive:false});
+  cv.addEventListener('touchmove',e=>{
+    if(pinch&&e.touches.length===2){
+      const d=Math.abs(e.touches[1].clientX-e.touches[0].clientX)||1;
+      const ns=Math.min(SPEC_U,Math.max(2,pinch.span0*pinch.d0/d));
+      const centerU=pinch.u0+pinch.cf*pinch.span0;
+      let n0=Math.max(0,Math.min(centerU-pinch.cf*ns,SPEC_U-ns));
+      specU0=n0;specU1=n0+ns;drawSpec();
+    }else if(tdrag&&e.touches.length===1){
+      const r=cv.getBoundingClientRect(),sp=tdrag.u1-tdrag.u0;
+      let du=-(e.touches[0].clientX-tdrag.x)/r.width*sp;
+      du=Math.max(-tdrag.u0,Math.min(du,SPEC_U-tdrag.u1));
+      specU0=tdrag.u0+du;specU1=tdrag.u1+du;drawSpec();
+    }
+    e.preventDefault();
+  },{passive:false});
+  cv.addEventListener('touchend',e=>{
+    if(e.touches.length===0){tdrag=null;pinch=null;}
+    else if(e.touches.length===1){pinch=null;tdrag={x:e.touches[0].clientX,u0:specU0,u1:specU1};}
+  },{passive:false});
 })();
 
 document.getElementById('ck3').onchange=e=>{S.show3=e.target.checked;renderAll();};
