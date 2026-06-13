@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - claude/sleepy-carson-vsif2w
+      - claude/busy-meitner-bksw5c
   workflow_dispatch:
 
 permissions:
