@@ -73,6 +73,9 @@ tr:hover td{background:var(--bg2)}
 .bIM5{background:#FFF3DC;color:var(--amber)}.bOK{background:#EAF3DE;color:var(--green)}
 .b3TX{background:#ECEAF8;color:#534AB7}
 .bWarn{background:#FAEEDA;color:var(--amber)}.bErr{background:#FCEBEB;color:var(--red)}
+.bLock{background:#FAEEDA;color:var(--amber);gap:3px}
+.lockbtn.on{border-color:var(--amber);color:var(--amber);background:#FAEEDA}
+.r-lock td{background:rgba(133,79,11,.06)}
 .dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;vertical-align:middle;margin-right:3px}
 
 /* SPECTRUM */
@@ -212,6 +215,7 @@ tr:hover td{background:var(--bg2)}
       <div class="leg-i" id="li3t" style="display:none"><div class="leg-b" style="background:#534AB799"></div>3TX (3 émetteurs)</div>
       <div class="leg-i" id="li5" style="display:none"><div class="leg-b" style="background:#BA751766"></div>IM5</div>
       <div class="leg-i"><div class="leg-b" style="background:#185FA5;height:2px;align-self:center"></div>Scan mesuré (importé)</div>
+      <div class="leg-i" id="liLock" style="display:none"><i class="ti ti-lock" style="font-size:11px"></i>Porteuse verrouillée</div>
     </div>
   </div>
 </div>
@@ -912,6 +916,7 @@ const PLAN_BANDS=[[470,694],[822,838],[863,865],[1785,1805],[2400,2483.5]];
 function generatePlan(opts){
   const adv=!!(opts&&opts.adv), shuffle=!!(opts&&opts.shuffle);
   S.planAdv=adv;
+  const isLk=m=>!!m.locked&&isFinite(m.freq); // porteuse verrouillée par l'utilisateur
   const pr=document.getElementById('planOut');
   if(!S.ch.length){pr.innerHTML='<span style="color:var(--red)">Lancez d\'abord l\'analyse TNT.</span>';return;}
   if(!S.mics.length){pr.innerHTML='<span style="color:var(--red)">Ajoutez d\'abord des micros / IEM.</span>';return;}
@@ -927,7 +932,7 @@ function generatePlan(opts){
   // micros les plus contraints d'abord (plage étroite, spacing large) ;
   // en régénération, l'ordre des ex æquo est tiré au hasard
   const rk=S.mics.map(()=>Math.random());
-  const order=S.mics.map((m,i)=>i).sort((x,y)=>{
+  const order=S.mics.map((m,i)=>i).filter(i=>!isLk(S.mics[i])).sort((x,y)=>{
     const wx=S.mics[x].fmax-S.mics[x].fmin, wy=S.mics[y].fmax-S.mics[y].fmin;
     return (wx!==wy?wx-wy:(S.mics[y].spacing||350)-(S.mics[x].spacing||350))||(shuffle?rk[x]-rk[y]:0);
   });
@@ -944,6 +949,25 @@ function generatePlan(opts){
   const pairIM=(a,b)=>[2*a-b,2*b-a,3*a-2*b,3*b-2*a];
   // les 9 produits IM5 à 3 sources d'un triplet (3x−a−b, 2x+a−2b, …)
   const tri5=(x,a,b)=>[3*x-a-b,3*a-x-b,3*b-x-a,2*x+a-2*b,2*x+b-2*a,2*a+x-2*b,2*a+b-2*x,2*b+x-2*a,2*b+a-2*x];
+
+  // pose une porteuse et met à jour tous les masques (IM 2/3 tons, IM5, porteuses)
+  function commit(idx,freq,sp){
+    for(const c of setF) for(const im of pairIM(freq,c.freq)){
+      maskMark(imMask,im,GUARD);
+      const ch=chOf(im);
+      if(ch!=null&&legal(im)&&!inOcc(im)) polluted.add(ch);
+    }
+    for(let i=0;i<setF.length;i++)for(let j=i+1;j<setF.length;j++){
+      const a=setF[i].freq,b=setF[j].freq;
+      for(const im of [freq+a-b,freq+b-a,a+b-freq]) maskMark(im3Mask,im,GUARD3);
+      if(adv) for(const im of tri5(freq,a,b)) maskMark(im53Mask,im,GUARD53);
+    }
+    placed[idx]=freq; setF.push({freq,sp}); maskMark(carMask,freq,GUARD);
+  }
+
+  // porteuses verrouillées : pré-placées à leur fréquence actuelle. Les autres
+  // micros devront les contourner et éviter d'y créer des IM.
+  S.mics.forEach((m,idx)=>{ if(isLk(m)) commit(idx,m.freq,(m.spacing||350)/1000); });
 
   for(const idx of order){
     const m=S.mics[idx], sp=(m.spacing||350)/1000;
@@ -1010,21 +1034,7 @@ function generatePlan(opts){
         if(bestV===0) break; // candidat 100 % propre (et le mieux noté) trouvé
       }
     }
-    if(best!=null){
-      for(const c of setF) for(const im of pairIM(best,c.freq)){
-        maskMark(imMask,im,GUARD);
-        const ch=chOf(im);
-        if(ch!=null&&legal(im)&&!inOcc(im)) polluted.add(ch);
-      }
-      // IM 3 tons engendrées par la nouvelle porteuse avec chaque paire posée
-      for(let i=0;i<setF.length;i++)for(let j=i+1;j<setF.length;j++){
-        const a=setF[i].freq,b=setF[j].freq;
-        for(const im of [best+a-b,best+b-a,a+b-best]) maskMark(im3Mask,im,GUARD3);
-        if(adv) for(const im of tri5(best,a,b)) maskMark(im53Mask,im,GUARD53);
-      }
-      placed[idx]=best;setF.push({freq:best,sp});
-      maskMark(carMask,best,GUARD);
-    }
+    if(best!=null) commit(idx,best,sp);
   }
   S.planSlots=S.mics.map((m,i)=>({freq:placed[i],name:m.name,off:placed[i]!=null&&!S.ch.some(c=>placed[i]>=c.freq_start&&placed[i]<c.freq_end)}));
 
@@ -1057,6 +1067,7 @@ function generatePlan(opts){
   let h=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
     <span class="badge bMic">${adv?'Mode avancé · 3 sources + IM5':'Mode standard'}</span>
     <span class="badge ${nKO?'bWarn':'bOK'}">${nOK}/${S.mics.length} fréquences placées</span>
+    ${S.mics.filter(isLk).length?`<span class="badge bLock" title="Porteuses conservées telles quelles lors de la régénération"><i class="ti ti-lock"></i> ${S.mics.filter(isLk).length} verrouillée(s)</span>`:''}
     <span class="badge bTV">${imTV} IM en zone TV</span>
     ${imFree>0?`<span class="badge bWarn">${imFree} IM en zone libre${sacr.length?' (canaux sacrifiés : C'+sacr.join(', C')+')':''}</span>`:'<span class="badge bOK">0 IM en zone libre ✓</span>'}
     ${res3>0?`<span class="badge bWarn" title="Produits fA+fB−fC (3 émetteurs simultanés), plus faibles que les IM 2 tons">${res3} IM 3 tons sur porteuse</span>`:'<span class="badge bOK">0 IM sur les porteuses ✓</span>'}
@@ -1103,6 +1114,7 @@ function renderAll(){
   document.getElementById('li3').style.display=S.show3?'flex':'none';
   document.getElementById('li3t').style.display=S.show3T?'flex':'none';
   document.getElementById('li5').style.display=S.show5?'flex':'none';
+  document.getElementById('liLock').style.display=S.mics.some(m=>m.locked)?'flex':'none';
   syncImBars();
 }
 
@@ -1147,7 +1159,7 @@ function renderTable(){
 
   let h=`<table><thead><tr>
     <th>Type</th><th>Canal / ID</th><th>Fréq. début</th><th>Porteuse / Fréq. fin</th>
-    <th>Émetteur / Modèle</th><th>Niveau</th><th>Statut</th><th style="width:28px"></th>
+    <th>Émetteur / Modèle</th><th>Niveau</th><th>Statut</th><th style="width:64px"></th>
   </tr></thead><tbody>`;
 
   items.forEach(it=>{
@@ -1173,7 +1185,7 @@ function renderTable(){
         <td style="color:var(--text2);font-size:11px">${m.brand?m.brand+' ':''}${m.model||''}${m.band?' '+m.band:''}<br><span style="opacity:.7">${m.fmin}–${m.fmax} MHz · espacement ${m.spacing||m.bw} kHz</span></td>
         <td style="font-size:11px;color:var(--text2)">±${(m.bw/2).toFixed(0)} kHz</td>
         <td>${sb}</td>
-        <td><button class="btn btn-xs" style="border-color:var(--red);color:var(--red);padding:2px 5px" onclick="rmMic(${m.id})"><i class="ti ti-x"></i></button></td></tr>`;
+        <td style="white-space:nowrap"><button class="btn btn-xs lockbtn${m.locked?' on':''}" style="padding:2px 5px" onclick="toggleLock(${m.id})" title="${m.locked?'Fréquence verrouillée — clic pour déverrouiller':'Verrouiller cette fréquence (conservée à la régénération du plan)'}"><i class="ti ti-${m.locked?'lock':'lock-open'}"></i></button> <button class="btn btn-xs" style="border-color:var(--red);color:var(--red);padding:2px 5px" onclick="rmMic(${m.id})"><i class="ti ti-x"></i></button></td></tr>`;
     } else {
       const im=it.d;
       const mHit=S.mics.find(m=>Math.abs(m.freq-im.freq)<0.15);
@@ -1197,6 +1209,13 @@ function renderTable(){
 }
 
 function rmMic(id){S.mics=S.mics.filter(m=>m.id!==id);computeIM();renderAll();}
+// Verrouille / déverrouille la fréquence d'un micro : verrouillée, elle est
+// conservée telle quelle lors d'une (re)génération de plan.
+function toggleLock(id){
+  const m=S.mics.find(x=>x.id===id);if(!m)return;
+  m.locked=!m.locked;renderAll();
+  setSt(m.locked?`🔒 ${m.name} verrouillé sur ${m.freq} MHz`:`🔓 ${m.name} déverrouillé`);
+}
 
 // ── SPECTRUM ──────────────────────────────────────────────────────────
 // Échelle « virtuelle » : les bandes utiles sont à l'échelle, les zones
@@ -1322,6 +1341,10 @@ function drawSpec(){
     const bwPx=Math.abs(fx(m.freq+m.bw/2000)-xc);
     ctx.fillStyle=m.color+'22';ctx.fillRect(xc-bwPx,0,bwPx*2,BH);
     ctx.fillStyle=m.color;ctx.fillRect(xc-1.5,0,3,BH);
+    if(m.locked){ // cadenas : porteuse verrouillée
+      ctx.fillStyle=m.color;ctx.fillRect(xc-4,0,8,6);
+      ctx.fillStyle=dark?'#000':'#fff';ctx.fillRect(xc-1,2,2,2.5);
+    }
     ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.fillStyle=m.color;
     ctx.fillText('M'+(i+1),xc,stripH+9);
   });
@@ -1454,17 +1477,18 @@ function renderFreqPlan(){
     return;
   }
   let h=`<table><thead><tr>
-    <th>#</th><th>Nom</th><th>Matériel</th><th>Fréquence (MHz)</th><th>Plage</th><th>Statut</th><th style="width:28px"></th>
+    <th>#</th><th>Nom</th><th>Matériel</th><th>Fréquence (MHz)</th><th>Plage</th><th>Statut</th><th style="width:70px">Verrou</th><th style="width:28px"></th>
   </tr></thead><tbody>`;
   S.mics.forEach((m,i)=>{
     const st=micStatusBadge(m);
-    h+=`<tr>
+    h+=`<tr class="${m.locked?'r-lock':''}">
       <td><span class="dot" style="background:${m.color}"></span>${i+1}</td>
       <td><input type="text" value="${(m.name||'').replace(/"/g,'&quot;')}" data-fp="name" data-i="${i}" style="width:150px"></td>
       <td style="font-size:11px;color:var(--text2)">${m.brand?m.brand+' ':''}${m.model||'—'}${m.band?' '+m.band:''}</td>
       <td><input type="number" value="${m.freq}" step="0.025" data-fp="freq" data-i="${i}" style="width:100px;font-family:monospace"></td>
       <td style="font-size:11px;color:var(--text2)">${m.fmin}–${m.fmax}</td>
       <td>${st}</td>
+      <td><button class="btn btn-xs lockbtn${m.locked?' on':''}" onclick="toggleLock(${m.id})" title="${m.locked?'Fréquence verrouillée — clic pour déverrouiller':'Verrouiller cette fréquence (conservée à la régénération du plan)'}"><i class="ti ti-${m.locked?'lock':'lock-open'}"></i></button></td>
       <td><button class="btn btn-xs" onclick="rmMic(${m.id})" title="Supprimer"><i class="ti ti-x"></i></button></td>
     </tr>`;
   });
