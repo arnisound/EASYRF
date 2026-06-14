@@ -229,6 +229,7 @@ tr:hover td{background:var(--bg2)}
       <button class="btn btn-purple" id="genBtn" title="Garantit zéro IM 2 tons (2fA−fB, 3fA−2fB) sur chaque porteuse et dirige les IM vers les canaux TV occupés (sinon vers quelques canaux libres sacrifiés). Les IM 3 sources sont minimisées. Place tous les micros, jusqu'à 50."><i class="ti ti-wand"></i> Génération standard</button>
       <button class="btn btn-purple" id="advBtn" title="Mode strict : aucune IM 3 sources (fA+fB−fC) tolérée sur les porteuses, et minimisation des IM5 à 3 sources. Plus exigeant : peut ne pas placer tous les micros sur les gros plans."><i class="ti ti-sparkles"></i> Génération avancée</button>
       <button class="btn btn-purple" id="robBtn" title="Mode robuste : aucune IM3 (2fA−fB), IM5 (3fA−2fB), 3TX (fA+fB−fC) NI IM5 à 3 sources tolérée sur une porteuse. Le plus sûr — mais place potentiellement moins de micros sur les gros plans."><i class="ti ti-shield-check"></i> Génération robuste</button>
+      <button class="btn btn-purple" id="maxBtn" title="Capacité max : cale le plus de porteuses possible, en partant du principe que les émetteurs sont espacés (≥ 2 m) — les IM d'ordre élevé deviennent faibles. Garde IM resserrée, mais espacement constructeur conservé et canaux TNT protégés."><i class="ti ti-arrows-maximize"></i> Capacité max</button>
       <button class="btn btn-xs" id="regenBtn" style="display:none" title="Propose un autre plan équivalent (tirage différent)"><i class="ti ti-refresh"></i> Régénérer</button>
       <button class="btn btn-xs btn-green" id="applyBtn" style="display:none"><i class="ti ti-check"></i> Appliquer aux micros</button>
     </div>
@@ -902,7 +903,8 @@ function micStatusBadge(m){
 document.getElementById('genBtn').onclick=()=>generatePlan({adv:false});
 document.getElementById('advBtn').onclick=()=>generatePlan({adv:true});
 document.getElementById('robBtn').onclick=()=>generatePlan({rob:true});
-document.getElementById('regenBtn').onclick=()=>generatePlan({adv:S.planAdv,rob:S.planRob,shuffle:true});
+document.getElementById('maxBtn').onclick=()=>generatePlan({max:true});
+document.getElementById('regenBtn').onclick=()=>generatePlan({adv:S.planAdv,rob:S.planRob,max:S.planMax,shuffle:true});
 document.getElementById('applyBtn').onclick=applyPlan;
 document.getElementById('autoBtn').onclick=()=>{showTab('plan');generatePlan({adv:false});};
 
@@ -917,8 +919,9 @@ const PLAN_BANDS=[[470,694],[822,838],[863,865],[1785,1805],[2400,2483.5]];
 //                quasi équivalents pour proposer un plan différent.
 function generatePlan(opts){
   const rob=!!(opts&&opts.rob);             // mode robuste : durcit toutes les IM
-  const adv=!!(opts&&opts.adv)||rob, shuffle=!!(opts&&opts.shuffle);
-  S.planAdv=adv;S.planRob=rob;
+  const max=!!(opts&&opts.max);             // mode capacité max : émetteurs espacés (≥2 m)
+  const adv=(!!(opts&&opts.adv)||rob)&&!max, shuffle=!!(opts&&opts.shuffle);
+  S.planAdv=adv;S.planRob=rob;S.planMax=max;
   const isLk=m=>!!m.locked&&isFinite(m.freq); // porteuse verrouillée par l'utilisateur
   const pr=document.getElementById('planOut');
   if(!S.ch.length){pr.innerHTML='<span style="color:var(--red)">Lancez d\'abord l\'analyse TNT.</span>';return;}
@@ -930,7 +933,9 @@ function generatePlan(opts){
   const blocked=f=>nearOcc(f)||!legal(f);
   const chOf=f=>f>=470&&f<694?Math.floor((f-302)/8):(f>=822&&f<838?Math.floor((f-302)/8):null);
 
-  const GUARD=0.15; // garde entre une IM et une porteuse (MHz)
+  // garde entre une IM et une porteuse (MHz). En mode capacité max, émetteurs
+  // espacés (≥2 m) ⇒ IM plus faibles ⇒ garde resserrée pour caser plus de porteuses.
+  const GUARD=max?0.05:0.15;
 
   // micros les plus contraints d'abord (plage étroite, spacing large) ;
   // en régénération, l'ordre des ex æquo est tiré au hasard
@@ -1009,7 +1014,8 @@ function generatePlan(opts){
     // crée aucune sur une porteuse déjà posée.
     cands.sort((a,b)=>a.c3-b.c3||b.score-a.score);
     let best=null,bestV=Infinity,clean=0;
-    for(const c of cands.slice(0,800)){
+    if(max){ best=cands.length?cands[0].f:null; } // capacité max : meilleur slot 2 tons, IM faibles tolérées
+    else for(const c of cands.slice(0,800)){
       let v=c.c3;
       if(adv){
         // mode avancé : la moindre IM 3 sources disqualifie le candidat
@@ -1078,7 +1084,7 @@ function generatePlan(opts){
 
   const koNames=S.mics.filter((m,i)=>placed[i]==null).map(m=>m.name);
   let h=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-    <span class="badge bMic">${rob?'Mode robuste · IM3 + IM5 + 3TX (zéro sur porteuse)':(adv?'Mode avancé · 3 sources + IM5':'Mode standard')}</span>
+    <span class="badge bMic">${max?'Capacité max · émetteurs ≥ 2 m (IM faibles tolérées)':(rob?'Mode robuste · IM3 + IM5 + 3TX (zéro sur porteuse)':(adv?'Mode avancé · 3 sources + IM5':'Mode standard'))}</span>
     <span class="badge ${nKO?'bWarn':'bOK'}">${nOK}/${S.mics.length} fréquences placées</span>
     ${S.mics.filter(isLk).length?`<span class="badge bLock" title="Porteuses conservées telles quelles lors de la régénération"><i class="ti ti-lock"></i> ${S.mics.filter(isLk).length} verrouillée(s)</span>`:''}
     <span class="badge bTV">${imTV} IM en zone TV</span>
@@ -1086,7 +1092,7 @@ function generatePlan(opts){
     ${res3>0?`<span class="badge bWarn" title="Produits fA+fB−fC (3 émetteurs simultanés), plus faibles que les IM 2 tons">${res3} IM 3 tons sur porteuse</span>`:'<span class="badge bOK">0 IM sur les porteuses ✓</span>'}
     ${adv?(res5>0?`<span class="badge bWarn" title="Produits du 5e ordre à 3 sources (3fA−fB−fC, 2fA+fB−2fC…), très faibles">${res5} IM5 3 sources résiduelles</span>`:'<span class="badge bOK">0 IM5 3 sources ✓</span>'):''}
   </div>`;
-  if(koNames.length) h+=`<div style="color:var(--red);font-size:11px;margin-bottom:8px">⚠ Non placés (${rob?'contraintes IM3/IM5/3TX strictes — réessayez en avancé ou standard':(adv?'contrainte 3 sources stricte — réessayez en génération standard':'plage saturée')}) : ${koNames.join(', ')}</div>`;
+  if(koNames.length) h+=`<div style="color:var(--red);font-size:11px;margin-bottom:8px">⚠ Non placés (${max?'spectre saturé même au plus dense (espacement constructeur)':(rob?'contraintes IM3/IM5/3TX strictes — réessayez en avancé ou standard':(adv?'contrainte 3 sources stricte — réessayez en génération standard':'plage saturée'))}) : ${koNames.join(', ')}</div>`;
   h+=`<div style="font-size:11px;color:var(--text2);margin:2px 0 4px">Aperçu spectre — porteuses sur la bande TNT 470–694 (et PMSE 823–838 si utilisée) · <i class="ti ti-lock" style="font-size:11px"></i> = verrouillée</div>`;
   h+=`<canvas id="planCv" height="78" style="display:block;width:100%;margin-bottom:14px;border-radius:8px;border:0.5px solid var(--border)"></canvas>`;
   h+='<div class="plan-grid">';
