@@ -1074,6 +1074,8 @@ function generatePlan(opts){
     ${adv?(res5>0?`<span class="badge bWarn" title="Produits du 5e ordre à 3 sources (3fA−fB−fC, 2fA+fB−2fC…), très faibles">${res5} IM5 3 sources résiduelles</span>`:'<span class="badge bOK">0 IM5 3 sources ✓</span>'):''}
   </div>`;
   if(koNames.length) h+=`<div style="color:var(--red);font-size:11px;margin-bottom:8px">⚠ Non placés (${adv?'contrainte 3 sources stricte — réessayez en génération standard':'plage saturée'}) : ${koNames.join(', ')}</div>`;
+  h+=`<div style="font-size:11px;color:var(--text2);margin:2px 0 4px">Aperçu spectre (porteuses sur la bande TNT 470–694 MHz · <i class="ti ti-lock" style="font-size:11px"></i> = verrouillée)</div>`;
+  h+=`<canvas id="planCv" height="78" style="display:block;width:100%;margin-bottom:14px;border-radius:8px;border:0.5px solid var(--border)"></canvas>`;
   h+='<div class="plan-grid">';
 
   S.ch.forEach(ch=>{
@@ -1096,6 +1098,7 @@ function generatePlan(opts){
   const offGrid=S.mics.map((m,i)=>({m,f:placed[i]})).filter(x=>x.f!=null&&!S.ch.some(c=>x.f>=c.freq_start&&x.f<c.freq_end));
   if(offGrid.length) h+=`<div style="margin-top:10px;font-size:11px;color:var(--text2)">Hors bande TNT : ${offGrid.map(x=>`${x.m.name} <b>${x.f.toFixed(3)}</b>`).join(' · ')}</div>`;
   pr.innerHTML=h;
+  drawPlanSpectrum();
   document.getElementById('applyBtn').style.display='inline-flex';
   document.getElementById('regenBtn').style.display='inline-flex';
 }
@@ -1242,6 +1245,54 @@ function uOf(f){
   return u;
 }
 
+// Dessine un petit cadenas (anse + corps) centré en x, sommet à y, couleur col.
+function drawLock(ctx,x,y,col){
+  ctx.save();
+  ctx.strokeStyle=col;ctx.lineWidth=1.2;
+  ctx.beginPath();ctx.arc(x,y+4,2,Math.PI,0);ctx.stroke(); // anse
+  ctx.fillStyle=col;
+  ctx.beginPath();ctx.roundRect?ctx.roundRect(x-3,y+4,6,5,1):ctx.rect(x-3,y+4,6,5);ctx.fill(); // corps
+  ctx.restore();
+}
+
+// Mini-spectre de l'onglet Plan auto : aperçu simple (sans zoom) des canaux
+// TNT 470–694 et des porteuses du plan généré, avec cadenas sur les verrouillées.
+function drawPlanSpectrum(){
+  const cv=document.getElementById('planCv');
+  if(!cv||!cv.parentElement)return;
+  const ctx=cv.getContext('2d');
+  const W=cv.parentElement.offsetWidth-4||640,H=78;
+  const D=window.devicePixelRatio||1;
+  cv.width=W*D;cv.height=H*D;cv.style.width=W+'px';cv.style.height=H+'px';ctx.scale(D,D);
+  const dark=matchMedia('(prefers-color-scheme:dark)').matches;
+  ctx.clearRect(0,0,W,H);
+  const FMIN=470,FMAX=694,BH=H-16;
+  const fx=f=>(f-FMIN)/(FMAX-FMIN)*W;
+  // canaux TNT (occupé / libre)
+  S.ch.forEach(c=>{
+    if(c.freq_end<=FMIN||c.freq_start>=FMAX)return;
+    const x1=Math.max(fx(c.freq_start),0),x2=Math.min(fx(c.freq_end),W),w=x2-x1;
+    if(w<=0)return;
+    ctx.fillStyle=c.occupied?(dark?'rgba(163,45,45,.28)':'rgba(163,45,45,.12)'):(dark?'rgba(59,109,17,.2)':'rgba(59,109,17,.09)');
+    ctx.fillRect(x1,0,w,BH);
+    ctx.strokeStyle=c.occupied?'rgba(163,45,45,.45)':'rgba(99,153,34,.4)';
+    ctx.lineWidth=.5;ctx.strokeRect(x1+.25,.5,w-.5,BH-1);
+    if(w>14){ctx.fillStyle=c.occupied?'rgba(163,45,45,.7)':'rgba(59,109,17,.6)';ctx.font='9px sans-serif';ctx.textAlign='center';ctx.fillText('C'+c.ch,(x1+x2)/2,BH-4);}
+  });
+  // porteuses du plan (+ cadenas si verrouillées)
+  (S.planSlots||[]).forEach((sl,i)=>{
+    if(!sl||sl.freq==null||sl.freq<FMIN||sl.freq>FMAX)return;
+    const m=S.mics[i];if(!m)return;
+    const x=fx(sl.freq);
+    ctx.fillStyle=m.color;ctx.fillRect(x-1,0,2,BH);
+    if(m.locked) drawLock(ctx,x,0,m.color);
+  });
+  // axe MHz
+  ctx.fillStyle=dark?'rgba(255,255,255,.5)':'rgba(0,0,0,.5)';ctx.font='10px sans-serif';ctx.textAlign='center';
+  for(let f=478;f<=686;f+=16){const x=fx(f);if(x>12&&x<W-12)ctx.fillText(f,x,H-3);}
+  ctx.textAlign='left';ctx.fillText('MHz',2,H-3);
+}
+
 function drawSpec(){
   const cv=document.getElementById('cv');
   if(!cv||!cv.parentElement)return;
@@ -1341,10 +1392,7 @@ function drawSpec(){
     const bwPx=Math.abs(fx(m.freq+m.bw/2000)-xc);
     ctx.fillStyle=m.color+'22';ctx.fillRect(xc-bwPx,0,bwPx*2,BH);
     ctx.fillStyle=m.color;ctx.fillRect(xc-1.5,0,3,BH);
-    if(m.locked){ // cadenas : porteuse verrouillée
-      ctx.fillStyle=m.color;ctx.fillRect(xc-4,0,8,6);
-      ctx.fillStyle=dark?'#000':'#fff';ctx.fillRect(xc-1,2,2,2.5);
-    }
+    if(m.locked) drawLock(ctx,xc,0,m.color); // cadenas : porteuse verrouillée
     ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.fillStyle=m.color;
     ctx.fillText('M'+(i+1),xc,stripH+9);
   });
