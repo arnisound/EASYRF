@@ -129,6 +129,9 @@ tr:hover td{background:var(--bg2)}
     <input type="number" id="lat" value="43.9493" step="0.0001" style="width:84px">
     <span class="lbl">Lon</span>
     <input type="number" id="lon" value="4.8055"  step="0.0001" style="width:84px">
+    <span class="lbl">ou</span>
+    <input type="text" id="place" placeholder="Ville ou code postal" title="Saisir une commune ou un code postal français pour récupérer ses coordonnées GPS" style="width:160px">
+    <button class="btn" id="placeBtn" title="Géocoder la ville / le code postal saisi"><i class="ti ti-map-pin"></i> Localiser</button>
     <button class="btn" id="geoBtn"><i class="ti ti-current-location"></i> Géolocaliser</button>
     <button class="btn btn-blue" id="scanBtn"><i class="ti ti-broadcast"></i> Analyser TNT</button>
     <select id="exclKm" title="Ignorer les émetteurs TNT au-delà de cette distance : leurs canaux redeviennent utilisables" style="max-width:150px">
@@ -493,6 +496,33 @@ function showTab(id){
 }
 
 // ── GEO ──────────────────────────────────────────────────────────────
+// Géocodage direct ville / code postal -> coordonnées via l'API BAN
+// (api-adresse.data.gouv.fr, France, CORS autorisé). On vise le centre de la
+// commune (type=municipality) ; à défaut, une recherche libre (adresse).
+async function geocodePlace(){
+  const q=document.getElementById('place').value.trim();
+  if(!q){setSt('Saisir une ville ou un code postal.');return;}
+  const btn=document.getElementById('placeBtn');btn.disabled=true;
+  setSt('Recherche de « '+q+' »…');
+  try{
+    const base='https://api-adresse.data.gouv.fr/search/?limit=1&q='+encodeURIComponent(q);
+    let data=await fetchJson(base+'&type=municipality',8000);
+    if(!data.features||!data.features.length) data=await fetchJson(base,8000);
+    if(!data.features||!data.features.length){
+      setSt('Lieu introuvable : « '+q+' ». Essayez une commune ou un code postal français.');return;
+    }
+    const f=data.features[0],lon=f.geometry.coordinates[0],lat=f.geometry.coordinates[1],p=f.properties||{};
+    document.getElementById('lat').value=lat.toFixed(5);
+    document.getElementById('lon').value=lon.toFixed(5);
+    S.lat=lat;S.lon=lon;
+    const label=p.city?((p.postcode?p.postcode+' ':'')+p.city):(p.label||q);
+    setSt('✓ '+label+' — coordonnées renseignées. Cliquez « Analyser TNT ».');
+  }catch(e){setSt('Erreur géocodage : '+(e.message||e));}
+  finally{btn.disabled=false;}
+}
+document.getElementById('placeBtn').onclick=geocodePlace;
+document.getElementById('place').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();geocodePlace();}});
+
 document.getElementById('geoBtn').onclick=()=>{
   if(!navigator.geolocation){setSt('GPS non supporté');return;}
   navigator.geolocation.getCurrentPosition(p=>{
