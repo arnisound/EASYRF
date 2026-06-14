@@ -62,12 +62,16 @@ td{padding:5px 10px;border-bottom:0.5px solid var(--border);white-space:nowrap;v
 .r-tv-occ td{background:rgba(163,45,45,.04)}
 .r-mic td{background:rgba(24,95,165,.05)}
 .r-im3 td{background:rgba(133,79,11,.04)}
+.r-im3t td{background:rgba(83,74,183,.05)}
 .r-im5 td{background:rgba(133,79,11,.02)}
+.im-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.im-bar .im-lbl{font-size:11px;font-weight:600;color:var(--text2)}
 tr:hover td{background:var(--bg2)}
 .badge{display:inline-flex;align-items:center;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:500;line-height:1.6}
 .bTV{background:#FCEBEB;color:var(--red)}.bFree{background:#EAF3DE;color:var(--green)}
 .bMic{background:#E6F1FB;color:var(--blue)}.bIM3{background:#FAEEDA;color:var(--amber)}
 .bIM5{background:#FFF3DC;color:var(--amber)}.bOK{background:#EAF3DE;color:var(--green)}
+.b3TX{background:#ECEAF8;color:#534AB7}
 .bWarn{background:#FAEEDA;color:var(--amber)}.bErr{background:#FCEBEB;color:var(--red)}
 .dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;vertical-align:middle;margin-right:3px}
 
@@ -135,9 +139,6 @@ tr:hover td{background:var(--bg2)}
     </select>
     <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
       <button class="btn btn-xs" id="clearBtn" style="border-color:var(--red);color:var(--red)"><i class="ti ti-trash"></i> Tout effacer</button>
-      <label class="chk"><input type="checkbox" id="ck3" checked> IM3</label>
-      <label class="chk"><input type="checkbox" id="ck5"> IM5</label>
-      <label class="chk"><input type="checkbox" id="ckB" checked> Bande seule</label>
       <button class="btn btn-xs" id="csvBtn" title="Exporter le plan en CSV"><i class="ti ti-download"></i> CSV</button>
     </div>
   </div>
@@ -182,6 +183,7 @@ tr:hover td{background:var(--bg2)}
 
 <!-- TABLE -->
 <div class="pane on" id="pane-table">
+  <div id="imBarTable" class="im-bar" style="padding:14px 16px 4px"></div>
   <div class="tbl-sc" id="tblWrap">
     <div class="empty"><i class="ti ti-broadcast"></i>Entrez des coordonnées et cliquez "Analyser TNT", puis ajoutez vos micros.</div>
   </div>
@@ -196,13 +198,15 @@ tr:hover td{background:var(--bg2)}
       <span id="scanInfo" style="font-size:11px;color:var(--text2)">Aucun scan importé — formats CSV : Shure WWB, Sennheiser WSM, RF Explorer, tinySA…</span>
       <button class="btn btn-xs" id="scanClear" style="display:none;border-color:var(--red);color:var(--red)"><i class="ti ti-x"></i> Retirer</button>
     </div>
+    <div id="imBarSpec" class="im-bar" style="margin-bottom:8px"></div>
     <canvas id="cv" height="230" aria-label="Spectre UHF 470–694 MHz"></canvas>
     <div class="leg">
       <div class="leg-i"><div class="leg-b" style="background:rgba(163,45,45,.2);border:1px solid #A32D2D"></div>Canal TNT occupé</div>
       <div class="leg-i"><div class="leg-b" style="background:rgba(59,109,17,.15);border:1px solid #3B6D11"></div>Canal libre</div>
       <div class="leg-i"><div class="leg-b" style="background:#185FA5"></div>Porteuse micro</div>
       <div class="leg-i"><div class="leg-b" style="background:#185FA520"></div>BW micro</div>
-      <div class="leg-i" id="li3"><div class="leg-b" style="background:#854F0B99"></div>IM3</div>
+      <div class="leg-i" id="li3"><div class="leg-b" style="background:#854F0B99"></div>IM3 (2 émetteurs)</div>
+      <div class="leg-i" id="li3t" style="display:none"><div class="leg-b" style="background:#534AB799"></div>3TX (3 émetteurs)</div>
       <div class="leg-i" id="li5" style="display:none"><div class="leg-b" style="background:#BA751766"></div>IM5</div>
       <div class="leg-i"><div class="leg-b" style="background:#185FA5;height:2px;align-self:center"></div>Scan mesuré (importé)</div>
     </div>
@@ -255,7 +259,7 @@ tr:hover td{background:var(--bg2)}
 
 <script>
 const MC=['#185FA5','#993556','#3B6D11','#854F0B','#534AB7','#0F6E56','#D85A30','#0C447C'];
-const S={lat:43.9493,lon:4.8055,ch:[],mics:[],im:[],show3:true,show5:false,onlyB:true,_fmin:470,_fmax:694,_bw:200,planSlots:[],scan:null};
+const S={lat:43.9493,lon:4.8055,ch:[],mics:[],im:[],show3:true,show3T:false,show5:false,onlyB:true,_fmin:470,_fmax:694,_bw:200,planSlots:[],scan:null};
 const BACKEND='http://localhost:3001';
 
 // ── Import de scans de spectre RF (CSV multi-logiciels) ───────────────
@@ -855,7 +859,7 @@ function micStatusBadge(m){
   if(m.tntConflict) return '<span class="badge bErr">⚠ TNT</span>';
   const n2=m.imHits?m.imHits.length:0, n3=m.imHits3?m.imHits3.length:0;
   if(n2) return `<span class="badge bWarn" title="Produits d'intermodulation 2 tons (2fA−fB / 3fA−2fB) tombant sur cette fréquence">IM×${n2}</span>`;
-  if(n3) return `<span class="badge bIM3" title="Produits 3 tons (fA+fB−fC), plus faibles : audibles seulement si 3 émetteurs proches émettent en même temps">3T×${n3}</span>`;
+  if(n3) return `<span class="badge b3TX" title="Produits 3 émetteurs (fA+fB−fC), plus faibles : audibles seulement si 3 émetteurs proches émettent en même temps">3TX·${n3}</span>`;
   return '<span class="badge bOK">OK</span>';
 }
 
@@ -1067,7 +1071,9 @@ function renderAll(){
   const occ=S.ch.filter(c=>c.occupied).length;
   document.getElementById('sts').textContent=S.ch.length?`${occ} occ · ${S.ch.length-occ} libres · ${S.mics.length} micros · ${S.mics.filter(m=>m.imHits&&m.imHits.length).length} conflits IM`:'';
   document.getElementById('li3').style.display=S.show3?'flex':'none';
+  document.getElementById('li3t').style.display=S.show3T?'flex':'none';
   document.getElementById('li5').style.display=S.show5?'flex':'none';
+  syncImBars();
 }
 
 // Cellule « Émetteur » d'un canal TV : nom / lieu (distance) · mux
@@ -1099,8 +1105,10 @@ function renderTable(){
   S.ch.forEach(c=>{if(c.freq_end<=FMAX) items.push({f:c.freq_start,t:'tv',d:c});});
   S.mics.forEach((m,i)=>items.push({f:m.freq,t:'mic',d:m,i}));
   const imShow=S.im.filter(im=>{
-    if(!S.show3&&im.ord===3) return false;
-    if(!S.show5&&im.ord===5) return false;
+    const is3T=im.ord===3&&im.f3!=null;        // 3 émetteurs (fA+fB−fC)
+    if(im.ord===3&&im.f3==null&&!S.show3) return false; // IM3 (2 émetteurs)
+    if(is3T&&!S.show3T) return false;           // 3TX
+    if(im.ord===5&&!S.show5) return false;
     if(S.onlyB&&(im.freq<470||im.freq>694)) return false;
     return true;
   });
@@ -1140,8 +1148,12 @@ function renderTable(){
       const im=it.d;
       const mHit=S.mics.find(m=>Math.abs(m.freq-im.freq)<0.15);
       const src=im.f3!=null?`${im.f1?.toFixed(3)}, ${im.f2?.toFixed(3)}, ${im.f3?.toFixed(3)}`:`${im.f1?.toFixed(3)} / ${im.f2?.toFixed(3)}`;
-      h+=`<tr class="${im.ord===3?'r-im3':'r-im5'}">
-        <td><span class="badge ${im.ord===3?'bIM3':'bIM5'}">IM${im.ord}</span></td>
+      const is3T=im.ord===3&&im.f3!=null;
+      const rcls=im.ord===5?'r-im5':(is3T?'r-im3t':'r-im3');
+      const bcls=im.ord===5?'bIM5':(is3T?'b3TX':'bIM3');
+      const blab=im.ord===5?'IM5':(is3T?'3TX':'IM3');
+      h+=`<tr class="${rcls}">
+        <td><span class="badge ${bcls}">${blab}</span></td>
         <td style="font-size:11px;color:var(--text2)">${im.type}</td>
         <td colspan="2" style="font-family:monospace;color:var(--text2)">${im.freq} MHz</td>
         <td style="font-size:10px;color:var(--text2)">${src}</td>
@@ -1261,7 +1273,14 @@ function drawSpec(){
     ctx.strokeStyle='rgba(186,117,23,.5)';ctx.lineWidth=.8;ctx.setLineDash([2,4]);
     ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,BH);ctx.stroke();ctx.setLineDash([]);
   });
-  if(S.show3) S.im.filter(im=>im.ord===3&&(!S.onlyB||(im.freq>=FMIN&&im.freq<=FMAX))).forEach(im=>{
+  // 3TX : produits 3 émetteurs (fA+fB−fC) — plus faibles, tracé fin violet
+  if(S.show3T) S.im.filter(im=>im.ord===3&&im.f3!=null&&(!S.onlyB||(im.freq>=FMIN&&im.freq<=FMAX))).forEach(im=>{
+    const x=fx(im.freq);if(x<0||x>W)return;
+    ctx.strokeStyle='rgba(83,74,183,.6)';ctx.lineWidth=.9;ctx.setLineDash([2,3]);
+    ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,BH);ctx.stroke();ctx.setLineDash([]);
+  });
+  // IM3 : produits 2 émetteurs (2fA−fB) — les plus forts
+  if(S.show3) S.im.filter(im=>im.ord===3&&im.f3==null&&(!S.onlyB||(im.freq>=FMIN&&im.freq<=FMAX))).forEach(im=>{
     const x=fx(im.freq);if(x<0||x>W)return;
     ctx.strokeStyle='rgba(133,79,11,.7)';ctx.lineWidth=1.2;ctx.setLineDash([3,3]);
     ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,BH);ctx.stroke();ctx.setLineDash([]);
@@ -1376,9 +1395,25 @@ function drawSpec(){
   },{passive:false});
 })();
 
-document.getElementById('ck3').onchange=e=>{S.show3=e.target.checked;renderAll();};
-document.getElementById('ck5').onchange=e=>{S.show5=e.target.checked;renderAll();};
-document.getElementById('ckB').onchange=e=>{S.onlyB=e.target.checked;renderAll();};
+// ── Filtres IM (IM3 / 3TX / IM5 / Bande seule) — barre dupliquée dans les
+//    onglets Tableau et Spectre, état partagé dans S, synchronisé entre les deux.
+function imBarHTML(){
+  return '<span class="im-lbl">Afficher :</span>'
+    +'<label class="chk" title="Produits du 3e ordre à 2 émetteurs (2fA−fB, 3fA−2fB) — les plus forts"><input type="checkbox" data-flag="show3"'+(S.show3?' checked':'')+'> IM3</label>'
+    +'<label class="chk" title="Produits du 3e ordre à 3 émetteurs (fA+fB−fC) — plus faibles, audibles si 3 émetteurs proches émettent ensemble"><input type="checkbox" data-flag="show3T"'+(S.show3T?' checked':'')+'> 3TX</label>'
+    +'<label class="chk" title="Produits du 5e ordre à 2 émetteurs (3fA−2fB)"><input type="checkbox" data-flag="show5"'+(S.show5?' checked':'')+'> IM5</label>'
+    +'<label class="chk" title="N\'afficher que ce qui tombe dans la bande TNT 470–694 MHz"><input type="checkbox" data-flag="onlyB"'+(S.onlyB?' checked':'')+'> Bande seule</label>';
+}
+function initImBars(){['imBarTable','imBarSpec'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=imBarHTML();});}
+function syncImBars(){document.querySelectorAll('input[data-flag]').forEach(x=>{x.checked=!!S[x.dataset.flag];});}
+document.addEventListener('change',e=>{
+  const inp=e.target;
+  if(!inp.matches||!inp.matches('input[data-flag]'))return;
+  S[inp.dataset.flag]=inp.checked;
+  syncImBars();
+  renderAll();
+});
+initImBars();
 
 // ── PLAN FRÉQUENCES ÉDITABLE ─────────────────────────────────────────
 function renderFreqPlan(){
